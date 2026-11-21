@@ -1,0 +1,7 @@
+ref/
+__pycache__/
+*.pyc
+.DS_Store
+build/
+tools/.venv/
+rom/

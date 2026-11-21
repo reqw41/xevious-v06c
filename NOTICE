@@ -1,0 +1,19 @@
+NOTICE
+======
+
+Xevious (1982) is a game by Namco. The Amstrad CPC 6128 version used as the
+basis of this port (Easter Egg, 2026) is by Nemo (code, sound) and TotO
+(graphics), with the Arkos Tracker player by Targhan and the ZX0 compressor by
+Einar Saukas. All rights in the original games, their audiovisual assets and
+music remain with the respective copyright holders.
+
+This repository contains only original work of the port authors — Vector-06C
+platform code (`src/vec/`), the i8080 translation and JS model of the game
+logic (`src/i80/`, `src/model/`), SkoolKit control files with the authors'
+annotations (`src/cpc/`), tools (`tools/`), documentation (`docs/`) and the
+README — licensed under the MIT License (see LICENSE). No data from the
+original disk (code, graphics, music, screens) is included; the build reads it
+from a disk image you supply (`ref/cpc/`, not included).
+
+This project is not affiliated with Namco / Bandai Namco or the authors of the
+Amstrad CPC version.
