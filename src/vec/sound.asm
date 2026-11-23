@@ -162,8 +162,34 @@ snd_mute:
 	ld	de,snd_rec0+2*SND_REC+12
 	jp	snd_out
 
-; канал C, запись HL: шаг музыки и эффекта, вывод (номер канала — в snd_c: snd_step портит C)
-snd_ch:	ld	a,c
+; Пустой канал с уже выведенной тишиной не требует шага/смешивания.
+; После snd_stop указатели обнулены, но старый делитель может ещё звучать:
+; в этом случае обязательно пройти обычный snd_out. Заявки snd_queue
+; разобраны до snd_ch, поэтому новый поток сразу попадёт в полный путь.
+; Шум и все непустые потоки обрабатываются каждый кадр, как прежде.
+snd_ch:	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	dec	hl
+	jp	nz,.go
+	push	hl
+	ld	de,6
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	jp	nz,.busy
+	ld	de,5		; от второго байта эффекта к выведенному делителю (+12)
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	or	(hl)
+	pop	hl
+	ret	z
+	jp	.go
+.busy:	pop	hl
+; канал C, запись HL: шаг музыки и эффекта, вывод (snd_step портит C)
+.go:	ld	a,c
 	ld	(snd_c),a
 	push	hl
 	call	snd_step	; музыка
@@ -303,7 +329,11 @@ snd_step:
 
 ; вывод в счётчик C: HL — делитель (0 — тишина), DE — выведенное прошлым кадром; пишется только при изменении
 snd_out:
-	ex	de,hl
+	ld	a,(snd_off)	; S — звук выключен: на выход тишина, потоки идут дальше
+	and	1
+	jp	z,.on
+	ld	hl,0
+.on:	ex	de,hl
 	ld	a,(hl)
 	cp	e
 	jp	nz,.ch

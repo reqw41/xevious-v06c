@@ -4,11 +4,10 @@ font_adr:
 	ld	de,LETTERS - 7 * 0x41
 	cp	0x41
 	jp	nc,.m
-	cp	0x30		; ASCII-цифра -> 0–9
-	jp	c,.c
-	sub	0x30
-.c:	cp	0x20		; пробел -> 10; коды меньше 20h — как есть
-	jp	nz,.d
+	cp	0x20		; коды 0–12 — как есть
+	jp	c,.d
+	sub	0x30		; ASCII-цифра -> 0–9, пробел -> 10
+	jp	nc,.d
 	ld	a,10
 .d:	ld	de,HUD_FONT
 .m:	push	bc		; HL = DE + 7·знак

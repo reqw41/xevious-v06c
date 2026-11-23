@@ -20,14 +20,7 @@ hud_draw:
 	cp	1		; обычная прокрутка — +1; прочие сдвиги рисуем заново
 	jp	nz,.full
 	ld	a,(hl)
-	sub	HUD_Y + 7	; низ старого блока (пустая строка)
-	cp	247		; POP/PUSH не должны заходить в соседний столбец
-	jp	nc,.full
-	ld	(hud_copy.src + 1),a
-	inc	a
-	ld	(hud_move.row + 1),a
-	add	a,8
-	ld	(hud_copy.end + 1),a
+	sub	HUD_Y + 6	; первая строка над пустой (низ старого блока + 1); перенос по кругу в столбце
 	call	hud_move
 .check:	call	hud_check
 	jp	.draw
@@ -94,9 +87,7 @@ hud_draw:
 	ld	(hl),a
 	dec	l
 	ld	(hl),0		; строка под знаком — след прошлого обновления
-	ld	a,b		; знакоместа 0–4 (кораблики) — вторая плоскость
-	cp	HUD_W - 4
-	call	nc,hud_ship2
+	; C-плоскость значков всегда нулевая: поле сюда не попадает.
 	pop	hl
 	dec	b
 	jp	nz,.c
@@ -108,15 +99,10 @@ hud_draw:
 	dec	b
 	jp	nz,.c
 	ret
-; Копируются занятые кораблики и неизменные столбцы подписей/чисел.
-; HL после hud_copy сохраняется: фиксированные столбцы идут без обхода HUD_REC.
+;; Перенос занятых корабликов и неизменных столбцов подписей/чисел на строку вверх.
+; A — младший байт строки над старой пустой (src+1). Без SP и DI: цикл по столбцам, вращение B/C.
 hud_move:
-	ld	hl,0
-	add	hl,sp
-	ld	de,-4		; CALL и PUSH HL в hud_copy, одинаковая глубина всех вызовов
-	add	hl,de
-	ld	(hud_copy.sp + 1),hl
-.row:	ld	hl,(SCR_C + 1) * 256
+	ld	e,a
 	ld	a,(hud_last + 6)	; прежние жизни: новые знаки появятся после переноса
 	dec	a
 	jp	z,.fixed
@@ -124,89 +110,57 @@ hud_move:
 	cp	6
 	jp	c,.count
 	ld	a,5
-.count:	ld	(.left + 1),a
-.ship:	call	hud_copy
-	ld	a,h
-	add	a,0x20
-	ld	h,a
-	call	hud_copy
-	ld	a,h
-	sub	0x1f
-	ld	h,a
-.left:	ld	a,0
-	dec	a
-	ld	(.left + 1),a
-	jp	nz,.ship
-.fixed:
-	ld	h,SCR_C + 7
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	ld	h,SCR_C + 16
-	call	hud_copy
-	inc	h
-	call	hud_copy
+.count:	ld	d,a
+	; Значки жизни одноцветные; плоскость C этой части полосы всегда нулевая.
+	; Новая строка приходит из чёрной полосы, спрайты туда не выводятся.
+	ld	h,SCR_C + 0x20 + 4
+	call	hm_cols
+.fixed:	ld	h,SCR_C + 1		; 1UP
+	ld	d,3
+	call	hm_cols
+	ld	h,SCR_C + 17		; знак рекорда
+	ld	d,1
+	call	hm_cols
 	ld	h,SCR_C + 25
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	ld	h,SCR_C + 0x20 + 9
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
+	ld	d,4
+	call	hm_cols
+	ld	h,SCR_C + 0x20 + 10
+	ld	d,6
+	call	hm_cols
 	ld	h,SCR_C + 0x20 + 18
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	inc	h
-	call	hud_copy
+	ld	d,6
+	call	hm_cols
 	ld	h,SCR_C + 0x20 + 29
-	call	hud_copy
-	inc	h
-	call	hud_copy
-	ret
+	ld	d,2
+	jp	hm_cols
 
-; HL — новая пустая строка столбца. Четыре пары POP/PUSH без PSW:
-; первая пара временно сохраняется в операнде LXI (флаги i8080 не искажают пиксели).
-; SP возвращается в обычный стек перед EI; DI ограничен одним столбцом.
-; HL сохраняется; AF, BC, DE портятся. Все CALL — из hud_move с одной глубины стека.
-hud_copy:
-	push	hl
-.end:	ld	l,0
-	ld	(.dst + 1),hl
-.src:	ld	l,0
-	di
-	ld	sp,hl
-	pop	hl
-	ld	(.pair + 1),hl
-	pop	bc
-	pop	de
-	pop	hl
-.dst:	ld	sp,0
-	push	hl
-	push	de
-	push	bc
-.pair:	ld	hl,0
-	push	hl
-.sp:	ld	sp,0
-	pop	hl
-	ei
+; H — первый столбец, D — число столбцов, E — src+1. Новый блок: src+1 = 0 (пустая строка),
+; src+2..src+8 = старые src+1..src+7. A не портится.
+hm_cols:
+	ld	l,e
+	ld	c,(hl)
+	ld	(hl),0
+	inc	l
+	ld	b,(hl)
+	ld	(hl),c
+	inc	l
+	ld	c,(hl)
+	ld	(hl),b
+	inc	l
+	ld	b,(hl)
+	ld	(hl),c
+	inc	l
+	ld	c,(hl)
+	ld	(hl),b
+	inc	l
+	ld	b,(hl)
+	ld	(hl),c
+	inc	l
+	ld	c,(hl)
+	ld	(hl),b
+	inc	l
+	ld	(hl),c
+	inc	h
+	dec	d
+	jp	nz,hm_cols
 	ret

@@ -46,7 +46,9 @@ for i, t in enumerate(used):
         tiles += planes([p ^ 3 for p in cpc_row(g[t * 64 + r * 4: t * 64 + r * 4 + 4])])
 
 def pal_byte(r, g_, b):
-    return (r * 7 // 255) | ((g_ * 7 // 255) << 3) | ((b * 3 // 255) << 6)
+    # ближайший уровень ЦАП Вектора (R, G — 3 бита, B — 2), а не вниз: иначе цвета темнее CPC
+    q = lambda v, n: int(v * n / 255 + 0.5)
+    return q(r, 7) | (q(g_, 7) << 3) | (q(b, 3) << 6)
 BASE = [pal_byte(0, 0, 0), pal_byte(255, 255, 128), pal_byte(0, 128, 255), pal_byte(0, 128, 0)]
 
 def db(label, data):
@@ -59,6 +61,7 @@ out = '; данные образа Вектора (tools/vecdata.py) — из ф
 out += 'VDATA_PAL:\n' + db('VPAL', [BASE[i & 3] for i in range(16)])
 out += '\tif 0\n\tendif\n' if False else ''
 open(os.path.join(ROOT, 'build', 'gen', 'vec_pal.inc'), 'w').write(out)
+assert all(tmap[t] != 0xff for t in tl), 'TOPL requires all map tiles'
 open(os.path.join(ROOT, 'build', 'gen', 'vec_tilemap.inc'), 'w').write(db('TILEMAP', tmap))
 # TADR_H/TADR_L (по 256, с границы страницы): адрес тайла TILES_AT + 64·номер; старший 0 — тайла нет
 th = ['0' if v == 0xff else f'(TILES_AT+{64 * v})>>8' for v in tmap]
@@ -66,7 +69,26 @@ tlo = ['0' if v == 0xff else f'(TILES_AT+{64 * v})&255' for v in tmap]
 open(os.path.join(ROOT, 'build', 'gen', 'vec_tadr.inc'), 'w').write(
     'TADR_H:\n' + ''.join('\tdb\t' + ','.join(th[i:i + 8]) + '\n' for i in range(0, 256, 8)) +
     'TADR_L:\n' + ''.join('\tdb\t' + ','.join(tlo[i:i + 8]) + '\n' for i in range(0, 256, 8)))
-open(os.path.join(ROOT, 'build', 'gen', 'vec_tiles.inc'), 'w').write(db('TILES', tiles))
+zero_at = bytes(tiles).find(bytes(16))
+assert zero_at >= 0, 'no immutable black palette in tiles'
+open(os.path.join(ROOT, 'build', 'gen', 'vec_tiles.inc'), 'w').write(
+    db('TILES', tiles) + f'TILES_ZERO equ TILES+{zero_at}\n')
+# Yellow live-core pixels inside the radius-5 aperture. The CPC leaves the other
+# screen page dark here. The mask belongs to generated game data, never src/.
+core = [planes([p ^ 3 for p in cpc_row(g[0x3e80+y*4:0x3e84+y*4])]) for y in range(16)]
+mask = []
+for half in (0, 8):
+    for y in range(3, 13):
+        v = 0
+        for x in range(half, half+8):
+            if (2*x-15)**2 + (2*y-15)**2 <= 100:
+                bit = 0x80 >> (x-half)
+                assert not (core[y][half//8] & bit), 'core aperture is not dark in C'
+                v |= core[y][2+half//8] & bit
+        mask.append(v)
+assert sum(bin(v).count('1') for v in mask) == 21
+open(os.path.join(ROOT, 'build', 'gen', 'vec_andor.inc'), 'w').write(db('ANDOR_MASK', mask))
+
 # карта: пары байтов (BPE) по строкам
 FIRST = 0xb5
 assert max(tl) < FIRST, 'номер тайла залез на коды пар'

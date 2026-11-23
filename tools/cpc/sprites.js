@@ -73,7 +73,7 @@ for (const s of [0x8700, 0x8780, 0x9a00]) jobs.push(['draw_ground', s, [s]]);
 for (let s = 0x9c00; s <= 0x9d80; s += 0x20) jobs.push(['draw_glyph', s, [s, BUF]]);
 jobs.push(['draw_glyph', 0x9880, [0x9880, BUF]], ['draw_glyph', 0x98a0, [0x98a0, BUF]]);
 for (const n of ['draw_shot', 'draw_bullet', 'draw_bomb', 'draw_spark', 'draw_z23a', 'draw_z23b', 'draw_z48']) jobs.push([n, 0, [BUF]]);
-for (const s of [0xab10, 0xab70, 0xac10, 0xac70, 0xad10, 0xad70, 0xae10, 0xae70, 0xba10, 0xba70]) jobs.push(['draw_z23c', s, [BUF, s]]);
+for (const s of [0x8580, 0x85c0]) jobs.push(['draw_z23c', s, [BUF, s]]);
 let bad = 0;
 for (const [n, s, w] of jobs) {
   for (const par of [0, 1]) {

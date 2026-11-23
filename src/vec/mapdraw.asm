@@ -2,7 +2,8 @@
 ; Лежит в окне карты после данных (src/vec/game.asm): в основном коде места нет.
 
 ; 15 байт HL -> DE
-cp15:	ld	b,1
+cp15:	ld	b,3
+.copy5:
 	ld	a,(hl)
 	ld	(de),a
 	inc	hl
@@ -23,47 +24,8 @@ cp15:	ld	b,1
 	ld	(de),a
 	inc	hl
 	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	ld	a,(hl)
-	ld	(de),a
-	inc	hl
-	inc	de
-	dec	b		; B = 0 и флаги как после последней итерации прежнего цикла
+	dec	b
+	jp	nz,.copy5
 	ret
 
 ; наложение верхней строки: HL — 15 кодов (< 40h — тайл наложения OVLT), (ol_row) — строка памяти,

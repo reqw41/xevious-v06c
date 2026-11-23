@@ -1,33 +1,59 @@
 ; Надписи (src/vec/text.asm): строки надписей на поле — за тайлами (до таблицы 8A00h)
-S_PL1:	db	"PLAYER ONE",0xff
-S_RDY:	db	"READY",0xff
-S_OVER:	db	"GAME OVER",0xff
+	include "../../build/gen/vec_msgstr.inc"
 
-; загрузочный экран CPC (xeviload.scr) при старте: лежит сжатым в конце экрана (TLOAD_Z, в образе), распаковка на
-; месте при чёрной палитре; 3 с или огонь, затем титул. title_skip — без него (стенд)
-tload_show:
-	ld	a,(title_skip)
+; Читы. На титуле (каждый кадр): F1 + F3 — старт игры с читами: бесконечные жизни (NOP вместо DEC (HL)
+; в p_death_seq). При каждом старте неуязвимость выключена. NZ — старт с читами.
+title_cheat:
+	ld	hl,PL_HIT
+	call	god_set
+	ld	a,(kb_r1)
+	and	0x28
+	cp	0x28
+	ld	a,0x35		; DEC (HL)
+	jp	nz,.l
+	xor	a		; NOP
+.l:	ld	(p_death_seq.livd),a
+	sub	0x35
+	ret
+; В игре с читами: G (нажатие) — неуязвимость вкл/выкл (четыре записи попадания по кораблю — в 0037h, как у
+; стендов), со звуком. Вызов — раз в обновление (pause_chk).
+cheat_g:
+	ld	a,(p_death_seq.livd)
 	or	a
 	ret	nz
-	call	pal_black
-	ld	a,0xff
-	ld	(vscroll),a
-	ld	hl,TLOAD_Z
-	ld	de,0xc000
-	call	lz_unpack
-	xor	a		; последние 3 байта экрана — там был конец потока
-	ld	(0xfffd),a
-	ld	(0xfffe),a
-	ld	(0xffff),a
-	ld	hl,TLOAD_PAL
-	call	pal_set
-	ld	b,150
-.w:	push	bc
-	call	frame_in
-	pop	bc
-	ld	hl,SM_3041	; огонь — дальше
-	and	(hl)
-	ret	nz
-	dec	b
-	jp	nz,.w
-	ret
+	ld	a,(kb_r4)
+	and	0x80
+	ld	hl,g_prev
+	cp	(hl)
+	ret	z
+	ld	(hl),a
+	or	a
+	ret	nz		; отпускание
+	ld	hl,(p_erase_air.hitw+1)	; PL_HIT <-> 0037h
+	ld	a,l
+	xor	(PL_HIT ^ 0x37) & 0xff
+	ld	l,a
+	ld	a,h
+	xor	(PL_HIT ^ 0x37) >> 8
+	ld	h,a
+	call	god_set
+	ld	d,0
+	ld	hl,0x0f06
+	ld	e,0x40
+	jp	plat_sfx
+
+; Кеш строки карты (p_draw_map_row): ключ — MAP_ROW_X; сбрасывается каждой записью в карту (hook_mapw).
+; При попадании ROWBUF/FLAG_MAP прежние, регистры на выходе — как после полного расчёта.
+cache_map_row:
+	ld	hl,(MAP_ROW_X)
+cache_map_key:
+	ld	de,0xffff	; FFFFh/00xxh — не адрес строки карты
+	ld	a,l
+	cp	e
+	jp	nz,cache_map_miss
+	ld	a,h
+	cp	d
+	jp	z,cache_map_fast
+cache_map_miss:
+	ld	(cache_map_key+1),hl
+	jp	dmr_full

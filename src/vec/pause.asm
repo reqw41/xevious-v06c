@@ -17,6 +17,7 @@ vk_edge:
 
 ; в начале обновления
 pause_chk:
+	call	cheat_g
 	call	vk_edge
 	ret	z
 	ld	a,1

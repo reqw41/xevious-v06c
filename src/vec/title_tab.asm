@@ -25,7 +25,7 @@ tab_draw:
 	call	tab_row
 	pop	bc
 	push	bc
-	ld	hl,TBUF
+	ld	hl,TAB_BUF
 	ld	b,TAB_COL
 	call	txt_str
 	pop	bc
@@ -40,9 +40,9 @@ tab_draw:
 	ret
 S_BEST:	db	0xf3,"BEST FIVE PLAYERS",0xff
 
-; запись HL [место (3) 0, очки BCD (3), имя до 0] -> TBUF: цвет, «место очки имя», конец 0FFh
+; запись HL [место (3) 0, очки BCD (3), имя до 0] -> TAB_BUF: цвет, «место очки имя», конец 0FFh
 tab_row:
-	ld	de,TBUF
+	ld	de,TAB_BUF
 	ld	a,0xf2
 	ld	(de),a
 	inc	de
@@ -175,3 +175,36 @@ lz_unpack:
 	ret
 
 
+
+; Конец полного расчёта строки карты: запомнить AF/BC выхода (DE/HL постоянны).
+cache_map_save:
+	push	af
+	pop	hl
+	ld	(cache_map_af+1),hl
+	ld	h,b
+	ld	l,c
+	ld	(cache_map_bc+1),hl
+cache_map_fast:
+cache_map_bc:
+	ld	bc,0
+	ld	de,ROWBUF+17
+cache_map_af:
+	ld	hl,0
+	push	hl
+	pop	af
+	ld	hl,ROWBUF+32
+	ret
+cache_map_dirty:		; запись в карту: ключ недействителен (AF сохраняется)
+	push	af
+	xor	a
+	ld	(cache_map_key+2),a
+	pop	af
+	ret
+
+; читы (src/vec/text_tl.asm): HL — адрес записи попадания по кораблю (PL_HIT или 0037h — неуязвимость)
+god_set:
+	ld	(p_erase_air.hitw+1),hl
+	ld	(p_erase_bullets.hitw+1),hl
+	ld	(p_erase_sparks.hitw+1),hl
+	ld	(z_hitpl.hitw+1),hl
+	ret

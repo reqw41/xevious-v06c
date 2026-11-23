@@ -25,6 +25,11 @@ map_ptr:
 	pop	de
 	ret
 
+; Кеш строки карты есть только в образе Вектора: стенд процедур проверяет полный расчёт.
+cache_map_row	equ	dmr_full
+cache_map_save:	ret
+cache_map_dirty:	ret
+
 	include "../../build/gen/plat_stub.inc"
 	include "../../build/gen/cpc_tables.inc"
 	include "../../build/gen/ovl.inc"

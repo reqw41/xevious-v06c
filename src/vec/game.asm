@@ -41,7 +41,9 @@ OVL_SET_END:
 SCRATCH:	ds	64
 SCRATCH_END:
 	include "../../build/gen/init_state.inc"
-	assert	1 - (((0x3c00 - INIT_SM_END) >> 15) & 1), "код залез на переменные"
+	include "msgfast_lo.asm"
+msgfast_end:
+	assert	1 - (((0x3c00 - msgfast_end) >> 15) & 1), "код залез на переменные"
 	org	0x3c00			; свободное в переменных CPC (tools/cpc/initstate.js): 3C00h–3CE8h
 	include "font.asm"
 	include "text_lo.asm"
@@ -56,7 +58,7 @@ txt_pl:		db	0
 msg_new:	ds	8		; надписи на поле [столбец, строка, строка текста] × 2 — эта и прошлая подряд
 msg_old:	ds	8
 tab_cur:	db	0xff		; строка ввода имени в таблице (0FFh — нет)
-TBUF:		ds	24		; строка таблицы рекордов (цвета, место, очки, имя)
+TAB_BUF:		ds	24		; строка таблицы рекордов (цвета, место, очки, имя)
 ; Отложить одну точку верхней строки; HL — пункт отметки. Carry сохраняет путь отсечения.
 mark_save:
 	push	hl
@@ -78,6 +80,11 @@ mark_save:
 	pop	hl
 	scf
 	ret
+msg_clr:
+	ld	hl,MSG_BUF
+	ld	(msg_bufp),hl
+	ret
+msg_bufp:	dw	MSG_BUF
 hi_end:
 	assert	1 - (((0x4000 - hi_end) >> 15) & 1), "3F34h: залезли на окно карты"
 
@@ -90,6 +97,8 @@ hi_end:
 	include "lbline.asm"
 	include "text_map.asm"
 	include "marks_pending.asm"
+	include "andor.asm"
+	include "msgbox.asm"
 map_end:
 	assert	1 - (((TILES_AT - map_end) >> 15) & 1), "карта и наложение залезли на тайлы"
 	org	TILES_AT
@@ -116,7 +125,5 @@ DLIST_END:
 	include "../../build/gen/vec_title.inc"
 	assert	1 - (((DLIST_END - 1) >> 8) - (DLIST >> 8)) * (((DLIST_END - 1) >> 8) - (DLIST >> 8)), "DLIST через границу страницы"
 POOL:
-POOL_END equ	STACK_TOP - 0x80	; стек 128 Б (замер на всех прогонах: занято до 70)
+POOL_END equ	STACK_TOP - 0x60	; стек 96 Б; контроль стека — build/codex/mem/REPORT.md
 	assert	1 - (((POOL_END - POOL - 840) >> 15) & 1), "мало места под фон спрайтов (игра занимает до ~840 Б)"
-	; загрузочный экран — в конце экранной памяти (в образе), распаковка на месте при старте (tload_show)
-	include "../../build/gen/vec_tload.inc"

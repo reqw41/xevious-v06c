@@ -30,7 +30,7 @@ OVL_NSET equ	8
 OR_A0	equ	SCRATCH+61	; ovl_row: адрес первой клетки (2 байта)
 OR_C0	equ	SCRATCH+63	; ovl_row: её столбец
 
-hook_mapw: ret
+hook_mapw: jp cache_map_dirty
 
 ; A = код базы Андора в клетке DE и CY = 0, если база стоит и клетка в ней; иначе CY = 1. Портит HL, BC
 ovl_rect:

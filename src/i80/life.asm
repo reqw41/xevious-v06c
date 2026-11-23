@@ -54,31 +54,23 @@ zero_b:	ld	(hl),0
 	ret
 
 ; все слоты объектов пусты
-clear_objects:
-	ld	hl,SHOT_ST
-	ld	b,4
+clear_objects:			; состояния слотов — таблицей [длина, адрес] (Codex, шаг 16: −17 Б)
+	push	de
+	ld	hl,clear_objects_tab
+.clear:	ld	b,(hl)
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	hl
+	ex	de,hl
 	call	zero_b
-	ld	hl,A_ST
-	ld	b,5
-	call	zero_b
-	ld	hl,B_ST
-	ld	b,12
-	call	zero_b
-	ld	hl,W_ST
-	ld	b,6
-	call	zero_b
-	ld	hl,Z_ST
-	ld	b,5
-	call	zero_b
-	ld	hl,T_ST
-	ld	b,8
-	call	zero_b
-	ld	hl,S_ST
-	ld	b,5
-	call	zero_b
-	ld	hl,G_ST
-	ld	b,8
-	call	zero_b
+	pop	hl
+	ld	a,l
+	cp	(clear_objects_tab+24) & 0xff
+	jp	nz,.clear
+	pop	de
 	ld	a,8
 	ld	(GND_SLOT),a
 	xor	a
@@ -92,6 +84,23 @@ clear_objects:
 	ld	(ANDOR_POS),hl
 	ret
 
+clear_objects_tab:
+	db	4
+	dw	SHOT_ST
+	db	5
+	dw	A_ST
+	db	12
+	dw	B_ST
+	db	6
+	dw	W_ST
+	db	5
+	dw	Z_ST
+	db	8
+	dw	T_ST
+	db	5
+	dw	S_ST
+	db	8
+	dw	G_ST
 ; контрольная точка: в первой половине зоны (строка < 40h) — с середины (экран 15 строк из карты),
 ; иначе с начала зоны (из карты только нижняя строка)
 checkpoint:

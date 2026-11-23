@@ -15,19 +15,12 @@ title_show:
 	ld	(tt_mode),a
 	ld	(tt_cnt),a
 .w:	call	frame_in	; каждый кадр — опрос ввода
-	ld	a,(kb_r1)	; F1 + F3 — бесконечные жизни
-	and	0x28
-	cp	0x28
-	ld	a,0		; NOP
-	jp	z,.lv
+	call	title_cheat	; F1 + F3 — бесконечные жизни, G — неуязвимость: сразу игра
+	jp	nz,.go
 	ld	a,(0x3d42)
 	ld	hl,SM_3041	; огонь
 	and	(hl)
-	jp	z,.nf
-	ld	a,0x35		; DEC (HL) — обычная игра
-.lv:	ld	(p_death_seq.livd),a
-	jp	.go
-.nf:
+	jp	nz,.go
 	ld	hl,tt_cnt
 	inc	(hl)
 	jp	nz,.bl
@@ -88,7 +81,7 @@ tab_cur_row:
 	push	bc
 	call	tab_row
 	pop	bc
-	ld	hl,TBUF
+	ld	hl,TAB_BUF
 	ld	b,TAB_COL
 	jp	txt_str
 
@@ -158,5 +151,5 @@ title_skip:	db	0
 tt_cnt:		db	0
 tt_mode:	db	0		; 0 — титул, 1 — рекорды
 tab_nc:		db	0xf2		; цвет имени в строке таблицы
-PAL_BLACK:	ds	16		; палитра на время смены экрана
+PAL_BLACK equ TILES_ZERO	; неизменные 16 нулей, общие с тайлами
 lz_o:		db	0

@@ -105,37 +105,21 @@ function unpack(p) {                         // проверка формата
 const z = pack(raw);
 if (!unpack(z).equals(raw)) throw new Error('LZ: распаковка не совпала');
 const db = (lab, a) => `${lab}:\n` + Array.from({ length: Math.ceil(a.length / 16) }, (_, i) => '\tdb\t' + [...a.subarray(i * 16, i * 16 + 16)].join(',') + '\n').join('');
-const L = planes(lshot, null, { '0,0,0': 0, '255,255,255': 1, '0,128,255': 2, '128,128,128': 3 });
-const LRAW = L.raw.subarray(0, 0x4000 - 3);       // без 3 последних байт (пусто): там лежит конец потока, обнулит код
-if (L.raw[0x3ffd] | L.raw[0x3ffe] | L.raw[0x3fff]) throw new Error('загрузочный: конец экрана не пуст');
-const zl = pack(LRAW);
-if (!unpack(zl).equals(LRAW)) throw new Error('LZ загрузочного: распаковка не совпала');
-const pal = (r, g, b) => (r * 7 / 255 | 0) | ((g * 7 / 255 | 0) << 3) | ((b * 3 / 255 | 0) << 6);
+// загрузочный экран CPC -> индексы цветов 256×256 + палитра 16 (запасная заставка загрузчика tools/vecboot.js,
+// если нет своей ref/splash/xevious_splash.png)
+{
+  const C = { '0,0,0': 0, '255,255,255': 1, '0,128,255': 2 }, idx = Buffer.alloc(65536 + 16);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const i = ((y + Y0) * W + (x + X0)) * 3, k = `${lshot[i]},${lshot[i + 1]},${lshot[i + 2]}`;
+    let c = C[k]; if (c === undefined) { if (k !== '128,128,128') throw new Error(`цвет ${k}`); c = (x + y) & 1 ? 1 : 0; }
+    idx[y * 256 + x] = c;
+  }
+  const p8 = (r, g, b) => (r * 7 / 255 | 0) | ((g * 7 / 255 | 0) << 3) | ((b * 3 / 255 | 0) << 6);
+  [p8(0, 0, 0), p8(255, 255, 255), p8(0, 128, 255)].forEach((v, i) => { idx[65536 + i] = v; });
+  fs.writeFileSync(path.join(ROOT, 'build/gen/tload_idx.bin'), idx);
+}
+const pal = (r, g, b) => Math.round(r * 7 / 255) | (Math.round(g * 7 / 255) << 3) | (Math.round(b * 3 / 255) << 6);  // ближайший уровень ЦАП
 const TPAL = [pal(0, 0, 0), pal(255, 255, 255), pal(0, 128, 255), pal(255, 0, 0)];
 fs.writeFileSync(OUT, '; стартовый экран (tools/vectitle.js) — данные игры, не править\n' +
-  `TITLE_BY0 equ ${by0}\nTITLE_BY1 equ ${by1}\n` + db('TITLE_PAL', Buffer.from(Array.from({ length: 16 }, (_, i) => TPAL[i & 3]))) + db('TITLE_Z', z) +
-  db('TLOAD_PAL', Buffer.from(Array.from({ length: 16 }, (_, i) => [pal(0, 0, 0), pal(255, 255, 255), pal(0, 128, 255), pal(128, 128, 128)][i & 3]))));
-// загрузочный — в конце экранной памяти, распаковка на месте (в тот же экран, с C000h): запись не должна догнать
-// непрочитанное. Отступ от конца — наименьший, при котором после каждой команды потока конец записи <= место чтения.
-function inplaceMargin(p, n) {
-  for (let m = 0; m < 4096; m++) {
-    const S = 0x4000 - p.length - m;
-    let i = 0, o = 0, ok = true;
-    for (;;) {
-      const t = p[i++];
-      if (t < 0x80) { if (o > S + i) { ok = false; break; } i += t + 1; o += t + 1; continue; }
-      let k = (t & 63) + 3; if (t & 0x40) k += 64 * p[i++];
-      const off = p[i] | (p[i + 1] << 8); i += 2;
-      if (!off) break;
-      o += k;
-      if (o > S + i) { ok = false; break; }
-    }
-    if (ok) return m;
-  }
-  throw new Error('загрузочный: распаковка на месте не сходится');
-}
-const lm = inplaceMargin(zl);
-const TLOAD_AT = 0xc000 + 0x4000 - zl.length - lm;
-fs.writeFileSync(OUT.replace(/vec_title\.inc$/, 'vec_tload.inc'), '; загрузочный экран (tools/vectitle.js) — данные игры, не править; лежит в конце экрана, распаковка на месте\n' +
-  `TLOAD_AT equ 0x${TLOAD_AT.toString(16)}\n\torg\tTLOAD_AT\n` + db('TLOAD_Z', zl));
-console.log(`титул: ${raw.length} Б -> ${z.length} Б; мигающая надпись — строки ${by0}..${by1}; загрузочный: ${zl.length} Б (с ${TLOAD_AT.toString(16)}h, отступ ${lm})`);
+  `TITLE_BY0 equ ${by0}\nTITLE_BY1 equ ${by1}\n` + db('TITLE_PAL', Buffer.from(Array.from({ length: 16 }, (_, i) => TPAL[i & 3]))) + db('TITLE_Z', z));
+console.log(`титул: ${raw.length} Б -> ${z.length} Б; мигающая надпись — строки ${by0}..${by1}`);

@@ -17,6 +17,7 @@ const S = JSON.parse(fs.readFileSync(path.join(ROOT, 'build/gen/sprites.json'), 
 const imgs = new Map();         // ключ картинки -> метка
 let out = '; спрайты Вектора (tools/vecsprites.js) — из данных игры, не править\n';
 let body = '';
+const variants = [];
 const H = (v) => '0x' + (v & 0xff).toString(16).padStart(2, '0');
 // Память (замер покрытия tools/vec/vcover.js, 280 тыс. кадров через все зоны): буквы надписей draw_glyph
 // 9C00h–9D80h не выводятся (надписи — своим шрифтом); у этих картинок второй сдвиг ни разу не понадобился —
@@ -24,10 +25,10 @@ const H = (v) => '0x' + (v & 0xff).toString(16).padStart(2, '0');
 const NOGLYPH = (k) => /^draw_glyph:9[cd]/.test(k);
 // один сдвиг: второй за 280 тыс. кадров (tools/vec/vcover.js, без гибели до зоны 8) не понадобился или редок (до 40 раз)
 const ONEVAR = new Set(['draw_sprite:9080:0', 'draw_sprite:9100:0', 'draw_ground:9a00:0', 'draw_z23a:0:0', 'draw_z23b:0:0',
-  'draw_sprite:8500:1', 'draw_sprite:8700:0', 'draw_sprite:8700:1', 'draw_sprite:9100:1', 'draw_z23c:ab10:0']);
+  'draw_sprite:8500:1', 'draw_sprite:8700:0', 'draw_sprite:8700:1', 'draw_sprite:9100:1', 'draw_z23c:8580:0', 'draw_z23c:85c0:0']);
 function img(k) {
   const v = S[k];
-  if (!v || NOGLYPH(k)) return '0';
+  if (!v || NOGLYPH(k) || k === 'draw_sprite:8500:1') return '0';
   const key = v.dx + '|' + v.dy + '|' + v.px.join('/');
   if (imgs.has(key)) return imgs.get(key);
   const lab = `IMG_${imgs.size}`;
@@ -52,8 +53,10 @@ function img(k) {
       }
       bytes.push(mk, c, e);
     }
-    body += `${lab}_${vv}:\tdb\t${H(cofs)},${nb}\n`;
-    for (let i = 0; i < bytes.length; i += 24) body += '\tdb\t' + bytes.slice(i, i + 24).map(H).join(',') + '\n';
+    const name = `${lab}_${vv}`;
+    variants.push({ name, bytes: Buffer.from([cofs & 255, nb, ...bytes]) });
+    body += `; variant ${name}\n`;
+
   }
   return lab;
 }
@@ -63,7 +66,8 @@ const hx = (v) => v.toString(16);
 const tabb = (name, n, f) => { out += `${name}:\n`; for (let i = 0; i < n; i += 16) out += '\tdb\t' + Array.from({ length: Math.min(16, n - i) }, (_, j) => { const l = f(i + j); return l === '0' ? '0' : String(+l.slice(4) + 1); }).join(',') + '\n'; };
 tabb('SPR_IDX', 128, (i) => img(`draw_sprite:${hx(0x8000 + (i >> 1) * 0x80)}:${i & 1}`));
 tabb('GLY_IDX', 90, (i) => img(`draw_glyph:${hx(0x9800 + (i >> 1) * 0x20)}:${i & 1}`));
-tabb('Z23C_IDX', 64, (i) => { const k = i >> 1, hi = (k >> 1) === 0x0f ? 0xba : 0xab + (k >> 1); return img(`draw_z23c:${hx((hi << 8) | (k & 1 ? 0x70 : 0x10))}:${i & 1}`); });
+// Existing dispatcher maps source 8580h/85C0h to slots 40..43.
+tabb('Z23C_IDX', 64, (i) => i >= 40 && i <= 43 ? img(`draw_z23c:${i < 42 ? '8580' : '85c0'}:${i & 1}`) : '0');
 out += 'GND_LIST:\n';
 for (const s of [0x8700, 0x8780, 0x9a00]) for (const p of [0, 1]) out += `\tdw\t${hx(s)}h\n\tdb\t${p}\n\tdw\t${img(`draw_ground:${hx(s)}:${p}`)}\n`;
 out += '\tdw\t0\n';
@@ -73,6 +77,16 @@ out += 'IMG_TAB:\n' + Array.from({ length: imgs.size }, (_, i) => `\tdw\tIMG_${i
 const staticImage = img('draw_sprite:8600:0');
 body = body.replace(`${staticImage}:`, `STATIC_MIN_IMG:\n${staticImage}:`);
 out = out.replace(/\b([0-9a-f]+)h\b/g, (m, d) => '0x' + d);
+// A variant is a byte string with its own cofs/width header. Substrings are safe
+// aliases too: draw_img reads exactly that header and h*nb*3 following bytes.
+const kept = [];
+for (const v of [...variants].sort((a,b) => b.bytes.length-a.bytes.length)) {
+  const owner = kept.find(k => k.bytes.indexOf(v.bytes) >= 0);
+  const asm = owner ? `${v.name} equ ${owner.name}+${owner.bytes.indexOf(v.bytes)}\n`
+    : `${v.name}:\n` + Array.from({length:Math.ceil(v.bytes.length/24)}, (_,i) => '\tdb\t'+[...v.bytes.subarray(i*24,i*24+24)].map(H).join(',')+'\n').join('');
+  if (!owner) kept.push(v);
+  body = body.replace(`; variant ${v.name}\n`, asm);
+}
 fs.writeFileSync(path.join(ROOT, 'build/gen/vec_sprites.inc'), out + body + 'SPR_END:\n');
 // развёрнутые циклы по строкам (16 повторов, вход по высоте) — src/vec/sprites.asm
 // Последнее изменение экранного младшего адреса не читается вызывающим кодом.
@@ -96,14 +110,54 @@ fs.writeFileSync(path.join(ROOT, 'build/gen/vec_unroll.inc'), '; развёрн�
     const h = i + 1;
     return `\tdw\tUNR_DC+${(16 - h) * 10},UNR_DE+${(16 - h) * 10}\n`;
   }).join(''));
-fs.writeFileSync(path.join(ROOT, 'build/gen/vec_topl.inc'), '; верхняя строка поля (tools/vecsprites.js)\n' +
-  // верхняя строка поля (src/vec/platform.asm, draw_top_line): 15 тайлов, HL — номера тайлов, B — строка тайла × 4,
-  // E — строка памяти; столбец экрана — константа
-  'TOPL_SET:\n' + Array.from({ length: 15 }, (_, i) => `\tld\t(TOPL_A${i}+1),hl\n` + (i < 14 ? '\tinc\thl\n' : '')).join('') +
-  '\tret\nTOPL:\tcall\tTOPL_SET\nTOPL_RUN:\n' +
-  Array.from({ length: 15 }, (_, i) => [`TOPL_A${i}:\tld\ta,(0)`, 'ld\tl,a', 'ld\th,TILEMAP_AT >> 8', 'ld\ta,(hl)', 'cp\t0xff', `jp\tz,TOPL_N${i}`,
-    'ld\tc,a', 'rrca', 'rrca', 'and\t0x3f', 'add\ta,TILES_AT >> 8', 'ld\th,a', 'ld\ta,c', 'rrca', 'rrca', 'and\t0xc0', 'or\tb', 'ld\tl,a',
-    `ld\td,SCR_C+${1 + 2 * i}`, 'ld\ta,(hl)', 'ld\t(de),a', 'inc\tl', 'inc\td', 'ld\ta,(hl)', 'ld\t(de),a', 'inc\tl',
-    `ld\td,SCR_C+${0x21 + 2 * i}`, 'ld\ta,(hl)', 'ld\t(de),a', 'inc\tl', 'inc\td', 'ld\ta,(hl)', 'ld\t(de),a']
-    .map((o, k) => (k ? '\t' : '') + o + '\n').join('') + `TOPL_N${i}:\n`).join('') + '\tret\n');
+// Compact shared top-line renderer. All map tile IDs must have a TILEMAP entry.
+const topBody = ` ld l,a
+ ld h,TILEMAP_AT >> 8
+ ld a,(hl)
+ rrca
+ rrca
+ ld c,a
+ and 0x3f
+ add a,TILES_AT >> 8
+ ld h,a
+ ld a,c
+ and 0xc0
+ or b
+ ld l,a
+ ld a,(hl)
+ ld (de),a
+ inc l
+ inc d
+ ld a,(hl)
+ ld (de),a
+ inc l
+ ld a,d
+ add a,0x1f
+ ld d,a
+ ld a,(hl)
+ ld (de),a
+ inc l
+ inc d
+ ld a,(hl)
+ ld (de),a
+`;
+fs.writeFileSync(path.join(ROOT, 'build/gen/vec_topl.inc'), `
+TOPL_SET:
+ ld (TOPL_RUN.src+1),hl
+ ret
+TOPL:
+ call TOPL_SET
+TOPL_RUN:
+.src: ld hl,0
+` + Array.from({length:14}, (_,i) => ` ld d,SCR_C+${1+2*i}\n call TOPL_ONE\n`).join('') +
+` ld d,SCR_C+29
+ ld a,(hl)
+` + topBody + ` ret
+TOPL_ONE:
+ ld a,(hl)
+ inc hl
+ push hl
+` + topBody + ` pop hl
+ ret
+`);
 console.log(`картинок ${imgs.size}`);

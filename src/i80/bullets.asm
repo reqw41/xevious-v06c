@@ -13,12 +13,16 @@ p_erase_bullets:
 	ld	a,11
 	ld	(BJ),a
 .lp:	ld	a,(BJ)
-	ld	hl,B_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,B_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	bc,0x300 + (0xff & (B_ST - 1))
+	call	slot_dn		; слоты с состоянием < 3 пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	B_ST & 0xff
+	ld	(BJ),a
 	ld	a,(hl)
-	cp	3
-	jp	c,.nx
 	ld	a,(BUF_BACK)
 	ld	c,a
 	ld	a,(BJ)
@@ -71,7 +75,7 @@ p_erase_bullets:
 	or	a
 	jp	nz,.nh
 	inc	a
-	ld	(PL_HIT),a
+.hitw:	ld	(PL_HIT),a	; титул Вектора (G) переводит запись на 0037h — неуязвимость
 .nh:	ld	a,(BJ)
 	ld	hl,B_ST
 	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
@@ -82,9 +86,7 @@ p_erase_bullets:
 	ld	(hl),a
 .nx:	ld	a,(BJ)
 	dec	a
-	ld	(BJ),a
-	jp	p,.lp
-	ret
+	jp	.la
 
 ; upd_bullets: слоты 0..11: ушла за края (X < 6, X >= 79h, Y экрана >= E1h) -> FFh; иначе состояние до 3,
 ; задний = передний + шаг, вывод
@@ -92,12 +94,16 @@ p_upd_bullets:
 	xor	a
 	ld	(BJ),a
 .lp:	ld	a,(BJ)
-	ld	hl,B_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,B_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (B_ST + 12)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	B_ST & 0xff
+	ld	(BJ),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	a,(BJ)
 	add	a,a
 	ld	c,a
@@ -188,10 +194,7 @@ p_upd_bullets:
 	ld	(hl),0xff
 .nx:	ld	a,(BJ)
 	inc	a
-	ld	(BJ),a
-	cp	12
-	jp	c,.lp
-	ret
+	jp	.la
 
 ; upd_bomb: полёт 15 шагов (Y −5 за шаг, при остановке прокрутки −4), на 10h — FFh (стереть)
 p_upd_bomb:

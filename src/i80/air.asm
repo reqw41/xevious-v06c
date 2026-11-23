@@ -250,7 +250,7 @@ p_erase_air:
 	ld	l,a
 	ld	a,(AXX)
 	call	p_hit_player
-	ld	(PL_HIT),a
+.hitw:	ld	(PL_HIT),a	; титул Вектора (G) переводит запись на 0037h — неуязвимость
 .ns:	ld	a,(AA)
 	ld	hl,A_ST
 	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
@@ -264,15 +264,18 @@ p_erase_air:
 	ld	hl,ALIVE
 	dec	(hl)
 	jp	.nx
-.al:	xor	a
-	ld	(AI),a
-.sl:	ld	a,(AI)
-	ld	hl,SHOT_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
-	ld	l,a
-	ld	a,(hl)
+.al:	ld	hl,SHOT_ST	; поиск выстрела в состоянии 3 указателем (SHOT_ST..+3 в одной странице)
+.sc:	ld	a,(hl)
 	cp	3
-	jp	nz,.sn
+	jp	z,.sf
+.sc1:	inc	l
+	ld	a,l
+	cp	(SHOT_ST + 4) & 0xff
+	jp	c,.sc
+	jp	.edge
+.sf:	ld	a,l
+	sub	SHOT_ST & 0xff
+	ld	(AI),a
 	ld	a,(AA)
 	ld	hl,A_ST
 	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
@@ -318,10 +321,10 @@ p_erase_air:
 	call	p_add_score
 	jp	.edge
 .sn:	ld	a,(AI)
-	inc	a
-	ld	(AI),a
-	cp	4
-	jp	c,.sl
+	ld	hl,SHOT_ST
+	add	a,l
+	ld	l,a
+	jp	.sc1
 .edge:	ld	a,(AXX)
 	cp	3
 	jp	c,.kill
@@ -348,7 +351,18 @@ p_erase_air:
 p_upd_air:
 	xor	a
 	ld	(AA),a
-.lp:	ld	a,(AA)
+.lp:	ld	a,(AA)		; пустой слот (не 1 и не FBh..FEh) — сразу к следующему: AKB/ABUF ему не нужны
+	ld	hl,A_ST
+	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+	ld	l,a
+	ld	a,(hl)
+	cp	1
+	jp	z,.on
+	cp	0xfb
+	jp	c,.nx
+	cp	0xff
+	jp	z,.nx
+.on:	ld	a,(AA)
 	add	a,a
 	ld	c,a
 	ld	a,(BUF_BACK)
@@ -632,8 +646,9 @@ p_upd_air:
 	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
 	ld	l,a
 	ld	a,(hl)
+	cp	0xfb		; живой (1) и пустой — без взрыва
+	jp	c,.nx
 	ld	hl,0x8480
-	cp	0xfb
 	jp	z,.bd
 	ld	hl,0x8500
 	cp	0xfc

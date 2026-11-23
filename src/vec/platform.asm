@@ -22,7 +22,6 @@ start:	di
 	in	a,(6)
 	ld	(joy0),a
 	ei			; самоизменяемые операнды уже в образе (tools/vecbuild.js)
-	call	tload_show	; загрузочный экран (в конце экрана — до его очистки)
 	call	scr_clear
 	call	title_show	; стартовый экран (src/vec/title.asm), до огня
 	ld	a,1
@@ -149,6 +148,23 @@ isr_input:
 	in	a,(2)
 	cpl
 	ld	(kb_r1),a
+	ld	a,0xef			; ряд 4: б7 G (неуязвимость в режиме читов)
+	out	(3),a
+	in	a,(2)
+	ld	(kb_r4),a		; активный уровень — 0
+	ld	a,0xbf			; ряд 6: б3 S — нажатие: звук вкл/выкл (snd_off, бит 0)
+	out	(3),a
+	in	a,(2)
+	and	8
+	ld	hl,s_prev
+	cp	(hl)
+	jp	z,.s6
+	ld	(hl),a
+	or	a
+	jp	nz,.s6
+	inc	hl			; snd_off — сразу за s_prev
+	inc	(hl)
+.s6:
 	ld	a,0xdf			; ряд 5: б5 M — бомба
 	out	(3),a
 	in	a,(2)
@@ -719,6 +735,7 @@ kb_vk:		db	0
 vk_prev:	db	0
 paused:		db	0
 kb_r1:		db	0
+kb_r4:		db	0xff
 vwait:		db	0
 snd_due:	db	0
 top_now:	db	1

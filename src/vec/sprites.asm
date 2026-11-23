@@ -269,9 +269,15 @@ flush_hud:
 	ld	a,(band_n)
 	cp	32
 	call	nz,hud_draw
+	ld	a,(su_now)	; ждали кадр — луч наверху поля: стирание позже (~5,8k тактов), чтобы не догонять луч;
+	or	a		; опоздали — без задержки (темп не теряется)
+	jp	z,.go
+	ld	b,240
+.dly:	dec	b
+	jp	nz,.dly
+.go:
 ; static_prepare заменяет первый LXI на CALL static_check только для готового кандидата.
-flush:	ld	hl,msg_old		; 0) надписи на поле — стереть (нарисованы последними)
-	call	msg_xor
+flush:	ld	hl,msg_old		; 0) место подмены static_prepare (LXI -> CALL static_check)
 	ld	hl,(dl_ptr)		; 1) стереть прошлое (DLIST с конца)
 .e1:	ld	a,l
 .bound:	cp	DLIST & 0xff
@@ -285,7 +291,11 @@ flush:	ld	hl,msg_old		; 0) надписи на поле — стереть (на
 	call	erase_rec
 	pop	hl
 	jp	.e1
-.e2:	ld	(dl_ptr),hl
+.e2:	push	hl			; граница DLIST — для andor_flush (он же ставит dl_ptr)
+	call	msg_restore		; надписи — под спрайтами: фон старой вернуть и сразу вывести новую
+	pop	hl
+	call	andor_flush
+	call	msg_flip
 .reset:	ld	hl,POOL		; при удержании — LHLD (DLIST+2), конец первой записи
 	ld	(pool_ptr),hl
 	; Обработчики очереди не добавляют записей. Как в q_push, младшие байты
@@ -335,7 +345,7 @@ flush:	ld	hl,msg_old		; 0) надписи на поле — стереть (на
 	call	hud_draw		; после большого скачка панель рисуется заново
 	ld	hl,QUEUE
 	ld	(qptr),hl
-	jp	msg_flip		; 5) надписи на поле
+	ret
 
 ; стереть запись POOL (HL): столбец (старший байт адреса C), строка, байтов в строке, строк; затем по столбцам:
 ; h байтов C, h байтов E

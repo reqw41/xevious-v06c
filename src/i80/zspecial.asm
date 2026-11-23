@@ -58,7 +58,7 @@ z_hitpl:
 	ld	l,a
 	ld	a,(ZX)
 	call	p_hit_player
-	ld	(PL_HIT),a
+.hitw:	ld	(PL_HIT),a	; титул Вектора (G) переводит запись на 0037h — неуязвимость
 	ret
 
 ; A = 1 — выстрел ZI в состоянии 3 задевает объект (ZX, ZY) (в заднем экране)
@@ -179,12 +179,16 @@ p_erase_z23:
 	xor	a
 	ld	(ZW),a
 .lp:	ld	a,(ZW)
-	ld	hl,Z_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,Z_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (Z_ST + 5)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	Z_ST & 0xff
+	ld	(ZW),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	a,(BUF_BACK)
 	ld	c,a
 	ld	a,(ZW)
@@ -257,10 +261,7 @@ p_erase_z23:
 	ld	(hl),0xff
 .nx:	ld	a,(ZW)
 	inc	a
-	ld	(ZW),a
-	cp	5
-	jp	c,.lp
-	ret
+	jp	.la
 
 ; upd_z23: слоты 0..4: Y заднего = Y переднего + 1, кадр +1 (из 8), вывод по кадру (буфер — по экрану,
 ; обратному переднему; третий вид — с картинкой 8580h/85C0h)
@@ -268,12 +269,16 @@ p_upd_z23:
 	xor	a
 	ld	(ZW),a
 .lp:	ld	a,(ZW)
-	ld	hl,Z_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,Z_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (Z_ST + 5)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	Z_ST & 0xff
+	ld	(ZW),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	a,(ZW)
 	add	a,a
 	ld	c,a
@@ -328,10 +333,7 @@ p_upd_z23:
 	call	z_go
 .nx:	ld	a,(ZW)
 	inc	a
-	ld	(ZW),a
-	cp	5
-	jp	c,.lp
-	ret
+	jp	.la
 
 ; spawn_z48: на строке камеры, кратной 16, — в свободный из 6: чётные справа (X 70h, dX −1),
 ; нечётные слева (X 10h, dX +1); dY 1, Y = камера + w + 20h (в переднем экране)
@@ -462,12 +464,16 @@ p_upd_z48:
 	xor	a
 	ld	(ZW),a
 .lp:	ld	a,(ZW)
-	ld	hl,W_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,W_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (W_ST + 6)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	W_ST & 0xff
+	ld	(ZW),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	b,a		; st
 	ld	a,(ZW)
 	add	a,a
@@ -573,7 +579,4 @@ p_upd_z48:
 	ld	(hl),0xff
 .nx:	ld	a,(ZW)
 	inc	a
-	ld	(ZW),a
-	cp	6
-	jp	c,.lp
-	ret
+	jp	.la

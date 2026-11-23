@@ -1,24 +1,126 @@
-; Надписи (src/vec/text.asm): часть перед буфером фона спрайтов
-; две записи [столбец, строка, строка (0 — нет)] с HL — XOR
-msg_xor:
-	ld	a,MSG_PL
-	ld	(txt_pl),a
-	call	.one
-.one:	ld	b,(hl)
+; Надпись: готовая кромка, две плоскости отдельными проходами.
+msg_one:
+	ld	b,(hl)
 	inc	hl
 	ld	c,(hl)
+	inc	c
 	inc	hl
 	ld	e,(hl)
 	inc	hl
 	ld	d,(hl)
-	inc	hl
 	ld	a,d
 	or	a
 	ret	z
+	ld	hl,(msg_bufp)
+	ld	a,b
+	add	a,SCR_C
+	ld	b,a
+	ld	(hl),b
+	inc	hl
+	ld	(hl),c
+	inc	hl
+	ld	(hl),0
 	push	hl
-	ex	de,hl
-	call	txt_str
+	inc	hl
+	ld	(hl),9
+	inc	hl
+	ld	(msg_bufp),hl
+.chr:
+	ld	a,(de)
+	cp	0xff
+	jp	z,.fin
+	inc	de
+	push	de
+	push	bc
+	ld	e,a
+	ld	d,0
+	ld	hl,MSG_MASKS
+	add	hl,de
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	de
+	push	hl
+	ld	d,b
+	ld	e,c
+	push	hl
+	ld	hl,(msg_bufp)
+	ld	b,h
+	ld	c,l
 	pop	hl
+	call	msg_mask9
+	pop	hl
+	ld	a,d
+	add	a,0x20
+	ld	d,a
+	ld	a,e
+	add	a,9
+	ld	e,a
+	call	msg_mask9
+	ld	h,b
+	ld	l,c
+	ld	(msg_bufp),hl
+	pop	hl
+	ld	a,e
+	add	a,8
+	ld	e,a
+	ld	b,7
+.ink:
+	ld	a,(de)
+	or	(hl)
+	ld	(de),a
+	inc	hl
+	dec	e
+	dec	b
+	jp	nz,.ink
+	pop	bc
+	inc	b
+	pop	de
+	pop	hl
+	inc	(hl)
+	push	hl
+	jp	.chr
+.fin:
+	pop	hl
+	ret
+
+msg_mask_tail:
+	ld	a,(de)
+	ld	(bc),a
+	inc	bc
+	and	(hl)
+	inc	hl
+	ld	(de),a
+	dec	e
+	ld	a,(de)
+	ld	(bc),a
+	inc	bc
+	and	(hl)
+	inc	hl
+	ld	(de),a
+	dec	e
+	ld	a,(de)
+	ld	(bc),a
+	inc	bc
+	and	(hl)
+	inc	hl
+	ld	(de),a
+	dec	e
+	ld	a,(de)
+	ld	(bc),a
+	inc	bc
+	and	(hl)
+	inc	hl
+	ld	(de),a
+	dec	e
+	ld	a,(de)
+	ld	(bc),a
+	inc	bc
+	and	(hl)
+	inc	hl
+	ld	(de),a
+	dec	e
 	ret
 
 ; --- надписи на поле: заявка логики (print_text CPC) -> msg_new; flush стирает msg_old, рисует и запоминает новые
@@ -115,46 +217,5 @@ hud_n:	ld	c,a		; 0 — значащая цифра ещё не встретил�
 	ld	c,1
 	ret
 
-; панель: вторая плоскость (C) знакомест 0–4 — кабина и крылья корабликов (или пусто). Из hud_draw: H — столбец
-; плоскости E, C — строка памяти верха, DE — последний байт нарисованного знака (B, C сохраняются; HL портится)
-hud_ship2:
-	ld	a,e
-	cp	(HUD_FONT + 7 * HUD_SHIP + 6) & 0xff
-	ld	de,HUD_FONT + 7 * HUD_SP
-	jp	nz,.s
-	ld	de,HUD_SHIPC
-.s:	ld	a,h
-	sub	0x20
-	ld	h,a
-	ld	l,c
-; Семь строк без счётчика: hud_draw сразу восстанавливает HL из стека.
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	inc	de
-	dec	l
-	ld	a,(de)
-	ld	(hl),a
-	dec	l
-	ld	(hl),0
-	ret
-HUD_SHIPC:	db	0x00,0x00,0x18,0x18,0x42,0x66,0x42	; кабина и крылья кораблика (свой рисунок)
+; Одноцветный значок: нулевая C-плоскость (эталон панели).
+HUD_SHIPC equ HUD_FONT + 7 * HUD_SP

@@ -130,12 +130,16 @@ p_erase_tabobj:
 	ld	a,7
 	ld	(TK),a
 .lp:	ld	a,(TK)
-	ld	hl,T_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,T_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	bc,0x100 + (0xff & (T_ST - 1))
+	call	slot_dn	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	T_ST & 0xff
+	ld	(TK),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	a,(BUF_BACK)
 	ld	c,a
 	ld	a,(TK)
@@ -224,9 +228,7 @@ p_erase_tabobj:
 	ld	(hl),0xff
 .nx:	ld	a,(TK)
 	dec	a
-	ld	(TK),a
-	jp	p,.lp
-	ret
+	jp	.la
 
 ; upd_tabobj: слоты 0..7: взрыв — кадр 8700h/8780h; живой: стрельба (флаг ≠ 0, счётчик & 7Fh = 0),
 ; шаг по пути (биты: 1 — вправо, 2 — влево, 8 — вниз, 4 — вверх), вывод
@@ -234,12 +236,16 @@ p_upd_tabobj:
 	xor	a
 	ld	(TK),a
 .lp:	ld	a,(TK)
-	ld	hl,T_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,T_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (T_ST + 8)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	T_ST & 0xff
+	ld	(TK),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	c,a
 	ld	a,(TK)
 	add	a,a
@@ -425,7 +431,4 @@ p_upd_tabobj:
 	call	plat_draw_sprite
 .nx:	ld	a,(TK)
 	inc	a
-	ld	(TK),a
-	cp	8
-	jp	c,.lp
-	ret
+	jp	.la

@@ -239,10 +239,23 @@ p_upd_ground_tiles:
 	ld	(SM_1C78),a
 .rs:	xor	a
 	ld	(GI),a
-.lp:	ld	hl,G_ST
-	call	g_slot
+.lp:	ld	a,(GI)		; пустые слоты — указателем (G_ST..+7 в одной странице)
+	ld	hl,G_ST
+	add	a,l
+	ld	l,a
+.ls:	ld	a,(hl)
 	or	a
-	jp	z,.nx
+	jp	nz,.on
+	inc	l
+	ld	a,l
+	cp	(G_ST + 8) & 0xff
+	jp	c,.ls
+	ld	a,8
+	ld	(GI),a
+	jp	.end
+.on:	ld	a,l
+	sub	G_ST & 0xff
+	ld	(GI),a
 	ld	a,(SLOW)
 	or	a
 	jp	nz,.nm
@@ -548,7 +561,7 @@ p_upd_ground_tiles:
 	ld	(GI),a
 	cp	8
 	jp	c,.lp
-; вернуть малую зону поражения
+.end:	; вернуть малую зону поражения
 	ld	a,(SM_1B4C)
 	cp	9
 	ret	z

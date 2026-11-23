@@ -12,6 +12,8 @@ DM_HI	 equ	SCRATCH+60
 ; draw_map_row: строка карты (15 тайлов, затем 15 кодов наложения) в ROWBUF+2..; место флага
 ; (код с битами 41h) — в FLAG_MAP. Вывод строки на экран — забота платформы.
 p_draw_map_row:
+	jp	cache_map_row	; кеш: та же строка MAP_ROW_X без записей в карту — ROWBUF уже готов
+dmr_full:
 	ld	hl,(MAP_ROW_X)
 	push	hl
 	call	map_ptr
@@ -61,7 +63,7 @@ p_draw_map_row:
 	inc	c
 	dec	b
 	jp	nz,.c2
-	ret
+	jp	cache_map_save
 ; flip_screens: задний и передний меняются; бит 5 старшего байта адреса экрана — по новому заднему
 p_flip_screens:
 	ld	a,(BUF_BACK)

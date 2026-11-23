@@ -22,25 +22,30 @@ if (!process.argv.includes('--fast')) {
   run('node', ['tools/cpc/sprites.js']);
   run('node', ['tools/vecsprites.js']);
   run('node', ['tools/vecsound.js']);
+  if (fs.existsSync(path.join(ROOT, 'ref/splash/xevious_splash.png'))) run('python3', ['tools/vecsplash.py']); // своя заставка вместо загрузочного CPC
+  else fs.rmSync(path.join(ROOT, 'build/gen/splash.bin'), { force: true });
   run('node', ['tools/vectitle.js']);
 }
+run('node', ['tools/vecmsg.js']);
 const PLAT = require(path.join(ROOT, 'src/model/platform.js'));
 const have = new Set();
 for (const f of fs.readdirSync(path.join(ROOT, 'src/vec'))) {
   if (!f.endsWith('.asm')) continue;
   for (const m of fs.readFileSync(path.join(ROOT, 'src/vec', f), 'utf8').matchAll(/^plat_(\w+):/gm)) have.add(m[1]);
 }
-let stub = '; заглушки платформы Вектора (tools/vecbuild.js): снимают свои аргументы со стека\n';
-const todo = [];
+let stub = '; заглушки платформы Вектора: одинаковые тела имеют общий адрес\n';
+const todo = [], groups = new Map();
 for (const e of PLAT.entries) {
   if (have.has(e.name)) continue;
   todo.push(e.name);
   let words = 0;
   for (const k of e.args) { const m = /^[sb](\d)$/.exec(k); if (m) words = Math.max(words, k[0] === 's' ? +m[1] + 1 : (+m[1] >> 1) + 1); }
   const bytes = e.pop !== undefined ? e.pop : 2 * words;
-  if (!bytes) { stub += `plat_${e.name}:\tret\n`; continue; }
-  stub += `plat_${e.name}:\tpop\thl\n` + '\tpop\tde\n'.repeat(bytes >> 1) + (bytes & 1 ? '\tinc\tsp\n' : '') + '\tjp\t(hl)\n';
+  const body = !bytes ? '\tret\n' : '\tpop\thl\n' + '\tpop\tde\n'.repeat(bytes >> 1) + (bytes & 1 ? '\tinc\tsp\n' : '') + '\tjp\t(hl)\n';
+  if (!groups.has(body)) groups.set(body, []);
+  groups.get(body).push(e.name);
 }
+for (const [body, names] of groups) stub += names.map(n => 'plat_' + n + ':\n').join('') + body;
 fs.writeFileSync(path.join(ROOT, 'build/gen/plat_vec_stub.inc'), stub);
 const { img, labels, list } = build(path.join(ROOT, 'src/vec/game.asm'), { base: 0x100 });
 // самоизменяемые операнды — как у CPC перед первой жизнью (tools/cpc/initstate.js): прямо в образ
@@ -53,8 +58,8 @@ fs.writeFileSync(out, img);
 fs.writeFileSync(out.replace(/\.rom$/, '.json'), JSON.stringify(labels, null, 1));
 fs.writeFileSync(out.replace(/\.rom$/, '.lst'), list + '\n');
 const H = (v) => v.toString(16).toUpperCase().padStart(4, '0');
-console.log(`фон спрайтов: ${labels.POOL_END - labels.POOL} Б; xevious.rom: ${img.length} Б (0100h–${H(0x100 + img.length - 1)}h), код до ${H(labels.INIT_SM_END)}h; ` +
+console.log(`фон спрайтов: ${labels.POOL_END - labels.POOL} Б; xevious.rom: ${img.length} Б (0100h–${H(0x100 + img.length - 1)}h), код до ${H(labels.msgfast_end || labels.INIT_SM_END)}h; ` +
   `платформа: сделано ${have.size}, заглушек ${todo.length}`);
-// релизный образ для эмуляторов (Emu80, vector06js): загрузка с 0100h
-fs.mkdirSync(path.join(ROOT, 'rom'), { recursive: true });
-fs.writeFileSync(path.join(ROOT, 'rom/Xevious-v06c.rom'), img);
+// релизный образ для эмуляторов (Emu80, vector06js): сжатая игра + заставка, загрузка с 0100h (tools/vecboot.js);
+// build/xevious.rom — несжатый образ для стендов
+run('node', ['tools/vecboot.js']);

@@ -70,12 +70,16 @@ p_erase_sparks:
 	ld	a,4
 	ld	(SK),a
 .lp:	ld	a,(SK)
-	ld	hl,S_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,S_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	bc,0x100 + (0xff & (S_ST - 1))
+	call	slot_dn	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	S_ST & 0xff
+	ld	(SK),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	ld	c,a
 	ld	a,(BUF_BACK)
 	ld	b,a
@@ -119,7 +123,7 @@ p_erase_sparks:
 	ld	l,a
 	ld	a,(SXX)
 	call	p_hit_player
-	ld	(PL_HIT),a
+.hitw:	ld	(PL_HIT),a	; титул Вектора (G) переводит запись на 0037h — неуязвимость
 .ns:	xor	a
 	ld	(SI),a
 .sl:	ld	a,(SI)
@@ -177,9 +181,7 @@ p_erase_sparks:
 	jp	c,.sl
 .nx:	ld	a,(SK)
 	dec	a
-	ld	(SK),a
-	jp	p,.lp
-	ret
+	jp	.la
 
 ; upd_sparks: слоты 0..4: FEh+ — счётчик +1; ушёл за края (X < 2, X >= 7Bh, Y экрана >= E1h) — FEh;
 ; иначе состояние до 3, задний = передний + (dX, 8), вывод
@@ -187,12 +189,16 @@ p_upd_sparks:
 	xor	a
 	ld	(SK),a
 .lp:	ld	a,(SK)
-	ld	hl,S_ST
-	add	a,l		; массив CPC целиком в одной странице: перенос в H не нужен
+.la:	ld	hl,S_ST
+	add	a,l		; массив в одной странице
 	ld	l,a
+	ld	c,0xff & (S_ST + 5)
+	call	slot_up	; пустые слоты пропускаются; Z — больше нет
+	ret	z
+	ld	a,l
+	sub	S_ST & 0xff
+	ld	(SK),a
 	ld	a,(hl)
-	or	a
-	jp	z,.nx
 	cp	0xfe
 	jp	c,.al
 	inc	(hl)
@@ -262,7 +268,4 @@ p_upd_sparks:
 	ld	(hl),0xfe
 .nx:	ld	a,(SK)
 	inc	a
-	ld	(SK),a
-	cp	5
-	jp	c,.lp
-	ret
+	jp	.la

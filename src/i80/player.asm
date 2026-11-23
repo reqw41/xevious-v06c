@@ -22,6 +22,27 @@ BOMB_ST	  equ	0x3e21
 ; Для них base.low + индекс < 256; G_Y (3DFCh..3E03h) требует полного расчёта.
 ; Общий at_hl_a остаётся для остальных обращений, включая таблицы и произвольные индексы.
 ; A = (HL + A); HL указывает на байт
+; Поиск занятого слота (байт ≠ 0) в массиве одной страницы: HL — текущий, C — младший байт за краем
+; (вверх — конец, вниз — начало − 1). NZ, A = (HL) — найден; Z — дошли до края.
+slot_up:	ld	a,l
+	cp	c
+	ret	z
+	ld	a,(hl)
+	or	a
+	ret	nz
+	inc	l
+	jp	slot_up
+; slot_dn: найден байт >= B (B ≥ 1).
+slot_dn:	ld	a,l
+	cp	c
+	ret	z
+	ld	a,(hl)
+	cp	b
+	jp	nc,.f
+	dec	l
+	jp	slot_dn
+.f:	or	a
+	ret
 at_hl_a:
 	add	a,l
 	ld	l,a
