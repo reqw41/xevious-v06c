@@ -11,6 +11,7 @@
  *   обновлении. Так сравниваются одни и те же объекты, а не разные исходы игры
  *   после сдвига темпа относительно случайного покадрового ввода.
  * Разбивка целей: только непрозрачные биты спрайтов, присутствующих в обоих снимках.
+ * player — корабль игрока (p_draw_player, включая кадры гибели), sight — прицел (единственный спрайт из p_main_loop).
  * static — дополнительно одинаковые картинка, адрес, сдвиг и отсечение. Категории
  * могут пересекаться; клетки считаются уникально внутри каждой категории.
  * Итог: доля кадров с мерцанием, точек на кадр, число «мерцаний» (клеток 8×8 с ошибкой); --shots — N худших кадров
@@ -70,23 +71,22 @@ function beamField() {
 let snapPrev = null, snapSeq = 0;
 const pend = [];                                       // кадры растра, ждущие следующего снимка
 let firstInFrame = null;                               // первый снимок, сделанный во время текущего кадра
-// снимок — на выходе из flush (он кончается переходом в msg_flip: надписи рисуются последними): по адресу возврата
+// снимок — на выходе из flush: после msgbox (23.11) msg_flip идёт до спрайтов, поэтому точка снимка — адрес
+// возврата из CALL hud_draw после flush.done (band_clear, hud_draw — последние шаги flush; аварийный flush — тот же путь)
 const snap = () => { snapSeq++; const s = { planes: planes(), sprites: spriteTrace() }; for (const p of pend) if (!p.next) p.next = s; settle(); if (!firstInFrame) firstInFrame = s; snapPrev = s; };
-let retAt = -1;
-m.addBreak(L.msg_flip, () => {
-  const sp = m.cpu.sp, ra = m.read(sp) | (m.read(sp + 1) << 8);
-  if (retAt !== ra) { if (retAt >= 0) m.delBreak(retAt); retAt = ra; m.addBreak(ra, () => { snap(); return false; }); }
-  return false;
-});
+let snapAt = -1;
+for (let a = L['flush.done']; a < L['flush.done'] + 16; a++) if (m.read(a) === 0xcd && (m.read(a + 1) | (m.read(a + 2) << 8)) === L.hud_draw) { snapAt = a + 3; break; }
+if (snapAt < 0) throw new Error('flicker: не найден CALL hud_draw после flush.done');
+m.addBreak(snapAt, () => { snap(); return false; });
 const EDGE = 16;
 const stat = { edge: 0, frames: 0, bad: 0, px: 0, cells: 0, quiet: 0, quietBad: 0, worst: [] };
-const targets = Object.fromEntries(['tabobj', 'tabobjStatic', 'z23', 'z23Static', 'ground', 'groundStatic'].map(k => [k, { frames: 0, bad: 0, px: 0, cells: 0, stablePixels: 0 }]));
+const targets = Object.fromEntries(['tabobj', 'tabobjStatic', 'z23', 'z23Static', 'ground', 'groundStatic', 'player', 'playerStatic', 'sight', 'sightStatic'].map(k => [k, { frames: 0, bad: 0, px: 0, cells: 0, stablePixels: 0 }]));
 function settle() {
   while (pend.length && pend[0].next) {
     const p = pend.shift(), A = p.prev.planes, B = p.next.planes;
-    const names = Object.keys(targets), tags = new Uint8Array(0x10000);
+    const names = Object.keys(targets), tags = new Uint16Array(0x10000);
     for (const s of p.prev.sprites) {
-      const group = { p_upd_tabobj: 'tabobj', p_upd_z23: 'z23', p_upd_ground_tiles: 'ground' }[s.source];
+      const group = { p_upd_tabobj: 'tabobj', p_upd_z23: 'z23', p_upd_ground_tiles: 'ground', p_draw_player: 'player', p_main_loop: 'sight' }[s.source];
       if (!group) continue;
       const next = p.next.sprites.find(t => t.id === s.id);
       if (!next) continue;

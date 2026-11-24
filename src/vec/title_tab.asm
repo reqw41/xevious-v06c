@@ -1,179 +1,95 @@
-; Экран рекордов титула и ввода имени (src/vec/title.asm) — лежит перед буфером фона
-; --- экран рекордов (как у CPC): логотип титула, заголовок, 5 строк «1ST  50000 TOTO»: место и имя белые, очки
-; синие, строка ввода имени (tab_cur) — имя красное
-TAB_HY	equ	112		; заголовок
-TAB_Y	equ	130		; первая строка, шаг 12
-TAB_COL	equ	6
-tab_screen:
-	ld	bc,160 * 256 + 255 - 96	; всё под логотипом — чёрное
-	call	scr_rows
-	ld	hl,S_BEST
-	ld	bc,7 * 256 + 255 - TAB_HY
+; Рекорд на титуле (src/vec/title.asm) — лежит перед буфером фона: «HIGH SCORE» красным и 6 цифр рекорда 3F21h
+; без ведущих нулей белым, под логотипом (место — TT_HICOL, TT_HIY из tools/vectitle.js).
+tt_hi:	ld	hl,S_HI
+	ld	bc,TT_HICOL * 256 + 255 - TT_HIY
 	call	txt_str
-tab_draw:
-	ld	hl,HI_TAB - 16 * 4 - 4	; запись 1-го места
-	ld	bc,0x500 + 255 - TAB_Y	; B — строк осталось, C — строка памяти
-.l:	push	hl
-	push	bc
-	ld	a,(tab_cur)	; строка ввода (tab_cur = 5 − B): имя красное
-	add	a,b
-	cp	5
-	ld	a,0xf2
-	jp	nz,.w
-	inc	a
-.w:	ld	(tab_nc),a
-	call	tab_row
-	pop	bc
-	push	bc
-	ld	hl,TAB_BUF
-	ld	b,TAB_COL
-	call	txt_str
-	pop	bc
-	pop	hl
-	ld	de,16
-	add	hl,de
-	ld	a,c
-	sub	12
-	ld	c,a
-	dec	b
-	jp	nz,.l
-	ret
-S_BEST:	db	0xf3,"BEST FIVE PLAYERS",0xff
-
-; запись HL [место (3) 0, очки BCD (3), имя до 0] -> TAB_BUF: цвет, «место очки имя», конец 0FFh
-tab_row:
-	ld	de,TAB_BUF
-	ld	a,0xf2
-	ld	(de),a
-	inc	de
-	ld	b,3
-.lr:	ld	a,(hl)
-	ld	(de),a
+	ld	hl,TT_HIBUF
+	ld	(hl),0xf2	; белый
 	inc	hl
-	inc	de
-	dec	b
-	jp	nz,.lr
-	inc	hl
-	ld	a,' '
-	ld	(de),a
-	inc	de
-	ld	a,0xf1		; очки — синие
-	ld	(de),a
-	inc	de
+	ex	de,hl
+	ld	hl,0x3f21
 	call	hud_num
-	ld	a,' '
+	ld	a,0xff
 	ld	(de),a
-	inc	de
-	ld	a,(tab_nc)
-	ld	(de),a
-	inc	de
-	ld	b,8
-.n:	ld	a,(hl)
-	or	a
-	jp	z,.e
-	ld	(de),a
-	inc	hl
-	inc	de
-	dec	b
-	jp	nz,.n
-.e:	ld	a,0xff
-	ld	(de),a
-	ret
-
-; смена экрана титула: tt_mode 0 — титул, 1 — рекорды; рисуется при чёрной палитре
-tt_switch:
-	call	pal_black
-	ld	a,(tt_mode)
-	xor	1
-	ld	(tt_mode),a
-	jp	z,.t
-	call	tab_screen
-	jp	pal_title
-.t:	ld	hl,TITLE_Z	; титул заново (надпись — «есть»: tt_cnt = 0)
-	ld	de,0xc000
-	call	lz_unpack
-	jp	pal_title
-pal_black:
-	ld	hl,PAL_BLACK
-	jp	pal_set
-pal_title:
-	ld	hl,TITLE_PAL
-pal_set:
-	ld	(pal_ptr),hl
-	ld	a,1
-	ld	(pal_req),a
-	jp	frame_in	; палитру ставит прерывание
+	ld	hl,TT_HIBUF
+	ld	bc,(TT_HICOL + 11) * 256 + 255 - TT_HIY
+	jp	txt_str
+S_HI:	db	0xf3,CH_H,CH_I,CH_G,CH_H,HUD_SP,CH_S,CH_C,CH_O,CH_R,CH_E,0xff
 
 
-; LZ (tools/vectitle.js): HL — поток, DE — куда. Байт t < 80h — t+1 литералов; иначе повтор длиной (t & 3Fh) + 3
-; (бит 6 — ещё байт: длина += 64·байт), смещение назад — 2 байта; смещение 0 — конец
-lz_unpack:
+; LZB (tools/vec/lz.js, длины до 255): HL — поток, DE — куда. Байт t: 00xxxxxx — t+1 литералов; 01llhhhh O —
+; длина l+3, смещение hhhh·256+O+1; 10llllll O — длина l+2, смещение O+1; 11llllll [доб.] O0 O1 — длина l+3 (l = 63 —
+; ещё байт к длине), смещение O1·256+O0; смещение 0 — конец (смещения < 8000h)
+lzb_unpack:
 	ld	a,(hl)
 	inc	hl
-	or	a
-	jp	m,.m
+	cp	0x40
+	jp	nc,.rp
 	inc	a
-	ld	b,a
+	ld	c,a
 .l:	ld	a,(hl)
 	ld	(de),a
 	inc	hl
 	inc	de
-	dec	b
+	dec	c
 	jp	nz,.l
-	jp	lz_unpack
-.m:	ld	b,a
-	and	0x3f
+	jp	lzb_unpack
+.rp:	cp	0x80
+	jp	nc,.r2
+	ld	b,a
+	rrca
+	rrca
+	rrca
+	rrca
+	and	3
 	add	a,3
 	ld	c,a
 	ld	a,b
+	and	15
+	ld	b,a
+	ld	a,(hl)		; B:A — смещение − 1
+	inc	hl
+	jp	.cp
+.r2:	cp	0xc0
+	jp	nc,.r3
+	and	63
+	add	a,2
+	ld	c,a
 	ld	b,0
-	and	0x40
-	jp	z,.s
-	ld	a,(hl)		; длина += 64·байт
-	inc	hl
-	push	hl
-	ld	l,a
-	ld	h,0
-	add	hl,hl
-	add	hl,hl
-	add	hl,hl
-	add	hl,hl
-	add	hl,hl
-	add	hl,hl
-	add	hl,bc
-	ld	b,h
-	ld	c,l
-	pop	hl
-.s:	ld	a,(hl)		; смещение
-	inc	hl
-	ld	(lz_o),a
 	ld	a,(hl)
 	inc	hl
-	push	hl
-	ld	h,a
-	ld	a,(lz_o)
+	jp	.cp
+.r3:	and	63
+	cp	63
+	jp	nz,.s
+	add	a,(hl)
+	inc	hl
+.s:	add	a,3
+	ld	c,a
+	ld	a,(hl)
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	sub	1		; B:A = смещение − 1; было 0 — конец
+	jp	nc,.cp
+	dec	b
+	ret	m
+.cp:	push	hl		; HL = DE − (B:A + 1) = DE + ~B:A
+	cpl
+	add	a,e
 	ld	l,a
-	or	h
-	jp	z,.e
-	ld	a,e		; источник = DE − смещение
-	sub	l
-	ld	l,a
-	ld	a,d
-	sbc	a,h
+	ld	a,b
+	cpl
+	adc	a,d
 	ld	h,a
 .c:	ld	a,(hl)
 	ld	(de),a
 	inc	hl
 	inc	de
-	dec	bc
-	ld	a,b
-	or	c
+	dec	c
 	jp	nz,.c
 	pop	hl
-	jp	lz_unpack
-.e:	pop	hl
-	ret
-
+	jp	lzb_unpack
 
 
 ; Конец полного расчёта строки карты: запомнить AF/BC выхода (DE/HL постоянны).

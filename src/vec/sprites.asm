@@ -34,6 +34,7 @@ q_push:	ex	de,hl
 	cp	QUEUE_END & 0xff
 	ret	nz
 	call	static_prepare	; аварийный flush полной очереди идёт без wait_vsync
+	call	t_prep		; t_iso не готов: свои записи корабля/прицела — стереть в t_e2
 	jp	flush
 
 ; A = X, L = Y — в (qx), (qy)
@@ -238,6 +239,7 @@ plat_draw_ground:
 	or	h
 	ret	z
 	ld	a,OP_GND
+	ld	(t_ns),a
 	jp	q_push
 .n4:	inc	hl
 .n3:	inc	hl
@@ -258,6 +260,7 @@ plat_restore_16:
 	ret	c
 	ex	de,hl
 	ld	a,OP_TILE
+	ld	(t_ns),a
 	jp	q_push
 
 ; ---- исполнение очереди --------------------------------------------------------------------------------
@@ -269,10 +272,11 @@ flush_hud:
 	ld	a,(band_n)
 	cp	32
 	call	nz,hud_draw
+	call	t_scan		; корабль и прицел (src/vec/tship.asm): ~2k тактов — в счёт задержки ниже
 	ld	a,(su_now)	; ждали кадр — луч наверху поля: стирание позже (~5,8k тактов), чтобы не догонять луч;
 	or	a		; опоздали — без задержки (темп не теряется)
 	jp	z,.go
-	ld	b,240
+	ld	b,240-T_DLY
 .dly:	dec	b
 	jp	nz,.dly
 .go:
@@ -292,10 +296,22 @@ flush:	ld	hl,msg_old		; 0) место подмены static_prepare (LXI -> CALL
 	pop	hl
 	jp	.e1
 .e2:	push	hl			; граница DLIST — для andor_flush (он же ставит dl_ptr)
+	call	t_e2			; свои записи корабля/прицела, не выводимые парой
 	call	msg_restore		; надписи — под спрайтами: фон старой вернуть и сразу вывести новую
 	pop	hl
 	call	andor_flush
 	call	msg_flip
+	ld	a,(clip_base)	; обрезка по полю для draw_img: y0 = Y − камера − 16 (0..223); 17 — опоздавшая строка
+	ld	c,a		; в LB. clip_base в flush не меняется (lb_out его не снимает)
+	ld	a,240
+	sub	c
+	ld	(draw_img.lim+1),a
+	ld	(draw_img.lim2+1),a
+	inc	a
+	ld	(draw_img.lim1+1),a
+	ld	a,(CAM_Y)
+	add	a,c
+	ld	(draw_img.cam+1),a
 .reset:	ld	hl,POOL		; при удержании — LHLD (DLIST+2), конец первой записи
 	ld	(pool_ptr),hl
 	; Обработчики очереди не добавляют записей. Как в q_push, младшие байты
@@ -335,13 +351,20 @@ flush:	ld	hl,msg_old		; 0) место подмены static_prepare (LXI -> CALL
 	jp	nz,.nm
 	call	mark_draw
 	jp	.nx
-.nm:	xor	a		; остался OP_GND (SPR/TILE/MARK разобраны выше)
+.nm:	cp	OP_GND-1
+	jp	nz,.nt
+	xor	a		; OP_GND
 	jp	.dr
+.nt:	sub	OP_TPRV-1-2	; OP_TPRV (+1): корабль/прицел — свой вывод (src/vec/tship.asm), A = 2/3
+	call	t_draw
+	jp	.nx
 .spr:	inc	a		; после DEC кода OP_SPR A=0
 .dr:	call	draw_img
 .nx:	pop	hl
 	jp	.q
-.done:	call	band_clear		; все спрайты уже обрезаны по полю
+.done:	xor	a
+	ld	(t_ns),a
+	call	band_clear		; все спрайты уже обрезаны по полю
 	call	hud_draw		; после большого скачка панель рисуется заново
 	ld	hl,QUEUE
 	ld	(qptr),hl
@@ -398,17 +421,7 @@ draw_img:
 	ld	b,(hl)		; h
 	ld	d,b
 	inc	hl
-	ld	a,(clip_base)	; обрезка по полю: y0 = Y − камера − 16 (0..223); 17 — опоздавшая строка в LB
-	ld	c,a
-	ld	a,240
-	sub	c
-	ld	(.lim+1),a
-	ld	(.lim2+1),a
-	inc	a
-	ld	(.lim1+1),a
-	ld	a,(CAM_Y)
-	add	a,c
-	ld	c,a
+.cam:	ld	c,0		; камера + clip_base и пределы .lim* — один раз в flush (перед очередью)
 	ld	a,e
 	sub	c
 .lim:	cp	224
@@ -479,8 +492,10 @@ draw_img:
 	jp	c,.cl
 	ld	a,(hl)
 .cl:	inc	hl
-	ld	(.cnt+1),a
 	ld	(di_nbv),a
+	add	a,b		; конец столбцов — адрес C следующего за последним (совет 16 №1, clip-count)
+	add	a,SCR_C
+	ld	(.cnt+1),a
 	ld	a,(di_k)	; DE — данные первого столбца (+3k при обрезке сверху)
 	ld	b,a
 	add	a,a
@@ -496,6 +511,8 @@ draw_img:
 .md:	ld	a,0
 	or	a
 	jp	z,.bg
+	dec	a
+	jp	nz,t_sv			; 2 — корабль/прицел: свой фон (src/vec/tship.asm)
 	; Входы уже найдены по высоте: сохранить их до использования HL под DLIST/POOL.
 	; BC свободен до выделения фона: два адреса циклов загружаются словами.
 	; Единственный прежний вызов .ent встроен (нет CALL/RET и четырёх STA).
@@ -566,9 +583,7 @@ draw_img:
 	ld	a,d
 	sub	0x1f
 	ld	d,a
-.cnt:	ld	a,0
-	dec	a
-	ld	(.cnt+1),a
+.cnt:	cp	0
 	jp	nz,.col
 	ld	a,(.md+1)
 	or	a

@@ -74,6 +74,11 @@ vec_reset:
 	ld	(mk_end),a
 	xor	a
 	ld	(static_prepare.old+1),a
+	ld	(s_st),a
+	ld	(s_st+5),a
+	ld	(p_st),a
+	ld	(p_st+5),a
+	ld	(t_ns),a
 	ld	(lb_pend),a
 	ld	(pl_dy),a
 	ld	(band_n),a

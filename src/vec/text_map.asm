@@ -1,15 +1,10 @@
 ; Надписи (src/vec/text.asm): часть в окне карты
-; знак A -> HL — его 7 байт: ASCII-буква, ASCII-цифра или пробел, код 0–9 (цифра), 10 (пробел), 11 (корабль)
+; знак A -> HL — его 7 байт: код 0–9 (цифра), 10 (пробел), 11 (корабль), 12 (знак рекорда), 13.. — буква (CH_x)
 font_adr:
-	ld	de,LETTERS - 7 * 0x41
-	cp	0x41
-	jp	nc,.m
-	cp	0x20		; коды 0–12 — как есть
-	jp	c,.d
-	sub	0x30		; ASCII-цифра -> 0–9, пробел -> 10
-	jp	nc,.d
-	ld	a,10
-.d:	ld	de,HUD_FONT
+	ld	de,HUD_FONT
+	cp	13
+	jp	c,.m
+	ld	de,LETTERS - 7 * 13
 .m:	push	bc		; HL = DE + 7·знак
 	ld	c,a
 	ld	b,0

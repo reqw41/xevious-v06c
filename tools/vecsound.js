@@ -49,22 +49,7 @@ m.onFrame = (f) => {
 };
 m.runFrames(FX0 + 7 * FXSTEP);
 
-// мелодия конца игры 4C00h (ввод имени): вторая модель — без управления до конца игры, очки 099999 (место в таблице)
-const go = new CPC(path.join(ROOT, 'ref/cpc/xevious.dsk'));
-go.boot('disc.bin');
-let goF = -1;
-const goRegs = [];
-const gstep0 = go.step.bind(go);
-go.step = function () {
-  if (goF < 0 && go.cpu.get_pc() === 0x4707) { const s = go.cpu.getState(); if (((s.d << 8) | s.e) === 0x4c00) goF = go.frames; }
-  return gstep0();
-};
-go.onFrame = (f) => {
-  go.keysOnly(f >= 100 && f < 110 ? ['J_FIRE1'] : []);
-  if (goF < 0 && f > 300) { go.poke(0x3f24, 0x09); go.poke(0x3f25, 0x99); go.poke(0x3f26, 0x99); }
-  if (goF >= 0) goRegs.push({ r: [...go.psgRegs.subarray(0, 14)] });
-};
-while (goF < 0 || goRegs.length < 700) { go.runFrames(50); if (go.frames > 8000) throw new Error('4C00h не прозвучала'); }
+// мелодия конца игры 4C00h играла только при вводе имени — ввод имени убран (титул без таблицы рекордов)
 
 // состояние канала в кадре -> [шум?, делитель] (делитель 0 — тишина)
 function chan(fr, ch) {
@@ -103,10 +88,6 @@ const gg = songs.find((e) => e.at === 0x4800 && e.f > gs.f);
 const ga = frames.slice(gg.f, FX0 - 10).map((fr) => chan(fr, 0));
 const [s0, per] = loopOf((i) => ga[i].join(','), ga.length, 16);
 S.SND_GAME_A = { runs: runs(ga.slice(0, s0)), loop: runs(ga.slice(s0, s0 + per)), per, s0 };
-// конец игры 4C00h: три канала, общая петля
-const gk = goRegs.map((fr) => [0, 1, 2].map((ch) => chan(fr, ch)));
-const [o0, oper] = loopOf((i) => gk[i].join('|'), gk.length, 32);
-for (let ch = 0; ch < 3; ch++) { const l = gk.map((x) => x[ch]); S[`SND_OVER_${'ABC'[ch]}`] = { runs: runs(l.slice(0, o0)), loop: runs(l.slice(o0, o0 + oper)), per: oper, s0: o0 }; }
 for (const e of events.filter((x) => x.kind === 'sfx')) {
   const l = [];
   for (let f = e.f; f < frames.length; f++) { if (f > e.f + 1 && frames[f].sfx[e.ch] === 0) break; l.push(chan(frames[f], e.ch)); }

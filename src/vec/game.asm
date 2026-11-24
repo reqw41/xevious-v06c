@@ -45,7 +45,7 @@ SCRATCH_END:
 msgfast_end:
 	assert	1 - (((0x3c00 - msgfast_end) >> 15) & 1), "код залез на переменные"
 	org	0x3c00			; свободное в переменных CPC (tools/cpc/initstate.js): 3C00h–3CE8h
-	include "font.asm"
+	include "../../build/gen/vec_letters.inc"
 	include "text_lo.asm"
 lo_end:
 	assert	1 - (((0x3ce9 - lo_end) >> 15) & 1), "3C00h: залезли на таблицу рекордов"
@@ -57,8 +57,7 @@ MSG_PL	equ	2
 txt_pl:		db	0
 msg_new:	ds	8		; надписи на поле [столбец, строка, строка текста] × 2 — эта и прошлая подряд
 msg_old:	ds	8
-tab_cur:	db	0xff		; строка ввода имени в таблице (0FFh — нет)
-TAB_BUF:		ds	24		; строка таблицы рекордов (цвета, место, очки, имя)
+TT_HIBUF:	ds	8		; рекорд на титуле: цвет, 6 знаков, конец
 ; Отложить одну точку верхней строки; HL — пункт отметки. Carry сохраняет путь отсечения.
 mark_save:
 	push	hl
@@ -124,6 +123,10 @@ DLIST_END:
 	include "../../build/gen/vec_sound.inc"
 	include "../../build/gen/vec_title.inc"
 	assert	1 - (((DLIST_END - 1) >> 8) - (DLIST >> 8)) * (((DLIST_END - 1) >> 8) - (DLIST >> 8)), "DLIST через границу страницы"
-POOL:
+	include "tship.asm"
+TBUF:				; фон корабля и прицела (src/vec/tship.asm), по записи
+TB_S	equ	TBUF
+TB_P	equ	TBUF + TB_SZ
+POOL	equ	TBUF + 2*TB_SZ
 POOL_END equ	STACK_TOP - 0x60	; стек 96 Б; контроль стека — build/codex/mem/REPORT.md
 	assert	1 - (((POOL_END - POOL - 840) >> 15) & 1), "мало места под фон спрайтов (игра занимает до ~840 Б)"

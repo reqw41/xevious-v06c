@@ -47,7 +47,7 @@ if (arg('trace', '')) m.watch(parseInt(arg('trace', ''), 16), (_, e) => {
 });
 const byte = a => rom[a - 0x100];
 const glyph = c => Array.from({ length: 7 }, (_, r) => byte(
-  (typeof c === 'string' ? L.LETTERS + (c.charCodeAt(0) - 65) * 7 : L.HUD_FONT + c * 7) + r));
+  (typeof c === 'string' ? L['LTR_' + c] : L.HUD_FONT + c * 7) + r));
 function expected() {
   const chars = Array(30).fill(10);
   for (let i = 0; i < Math.min(5, Math.max(0, m.peek(0x3d39) - 1)); i++) chars[3 + i] = 11;

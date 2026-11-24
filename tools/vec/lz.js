@@ -5,13 +5,13 @@
 //   10llllll O       — повтор длиной l+2 (2..65), смещение O + 1 (1..256)
 //   11llllll O0 O1   — повтор длиной l+3 (3..65); l = 63 — перед смещением ещё байт: длина += байт; смещение 1..65535
 // Метки конца нет: распаковщик останавливается по адресу. Разбор оптимальный по цене в байтах.
-function cands(src) {
-  const N = src.length, MAXL = 66 + 255, head = new Map(), cand = new Array(N);
+function cands(src, maxOff = 65535, MAXL = 66 + 255) {
+  const N = src.length, head = new Map(), cand = new Array(N);
   for (let i = 0; i < N; i++) {
     const c = [], key = src[i] | (src[i + 1] << 8), list = head.get(key) || [];
     let best = 1;
     for (let q = list.length - 1, n = 0; q >= 0 && n < 500; q--, n++) {
-      const p = list[q]; if (i - p > 65535) break;
+      const p = list[q]; if (i - p > maxOff) break;
       let l = 0; while (i + l < N && src[p + l] === src[i + l] && l < MAXL) l++;
       if (l >= 2 && (l > best || i - p <= 4096)) { c.push([l, i - p]); if (l > best) best = l; }
     }
@@ -26,8 +26,8 @@ function tokCost(l, o) {             // [цена, вид] лучшего ток
   if (o <= 4096 && l >= 3 && l <= 6 && 2 < b[0]) b = [2, 1];
   return b;
 }
-function pack(src) {
-  const N = src.length, cand = cands(src);
+function pack(src, maxOff = 65535, maxLen = 66 + 255) {  // maxOff — предел смещения (кольцевой буфер потоковой распаковки); maxLen — предел длины повтора
+  const N = src.length, cand = cands(src, maxOff, maxLen);
   const cost = new Float64Array(N + 1).fill(Infinity), how = new Array(N + 1);
   cost[N] = 0;
   for (let i = N - 1; i >= 0; i--) {

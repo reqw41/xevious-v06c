@@ -7,7 +7,7 @@
  *   3) tools/cpc/initstate.js — начальное состояние (build/gen/init_state.inc);
  *   4) заглушки входов платформы, которых нет в src/vec/*.asm (build/gen/plat_vec_stub.inc): снимают аргументы;
  *   5) сборка.
- *   node tools/vecbuild.js [--fast]   (--fast — только шаги 4–5)
+ *   node tools/vecbuild.js [--fast] [--splash16]   (--fast — только шаги 4–5; --splash16 — 16-цветная заставка)
  */
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +22,11 @@ if (!process.argv.includes('--fast')) {
   run('node', ['tools/cpc/sprites.js']);
   run('node', ['tools/vecsprites.js']);
   run('node', ['tools/vecsound.js']);
-  if (fs.existsSync(path.join(ROOT, 'ref/splash/xevious_splash.png'))) run('python3', ['tools/vecsplash.py']); // своя заставка вместо загрузочного CPC
+  // заставка загрузчика: по умолчанию загрузочный экран CPC (4 цвета); --splash16 — своя 16-цветная (tools/vecsplash.py)
+  if (process.argv.includes('--splash16') && fs.existsSync(path.join(ROOT, 'ref/splash/xevious_splash.png'))) run('python3', ['tools/vecsplash.py']);
   else fs.rmSync(path.join(ROOT, 'build/gen/splash.bin'), { force: true });
   run('node', ['tools/vectitle.js']);
+  run('node', ['tools/vecmusic.js']);   // музыка заставки (ref/music, не в git; нет — без музыки)
 }
 run('node', ['tools/vecmsg.js']);
 const PLAT = require(path.join(ROOT, 'src/model/platform.js'));

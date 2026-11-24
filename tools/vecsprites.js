@@ -76,6 +76,11 @@ for (const n of ['draw_shot', 'draw_bullet', 'draw_bomb', 'draw_spark', 'draw_z2
 out += 'IMG_TAB:\n' + Array.from({ length: imgs.size }, (_, i) => `\tdw\tIMG_${i}\n`).join('');
 const staticImage = img('draw_sprite:8600:0');
 body = body.replace(`${staticImage}:`, `STATIC_MIN_IMG:\n${staticImage}:`);
+// корабль и прицел (src/vec/tship.asm): картинка одна на обе чётности X
+for (const [lab, k] of [['T_IMG_SHIP', 'draw_sprite:8080'], ['T_IMG_SIGHT', 'draw_sprite:8200']]) {
+  if (img(`${k}:0`) !== img(`${k}:1`) && lab === 'T_IMG_SHIP') throw new Error(`${k}: разные картинки чётностей`);
+  body += `${lab}\tequ\t${img(`${k}:0`)}\n`;
+}
 out = out.replace(/\b([0-9a-f]+)h\b/g, (m, d) => '0x' + d);
 // A variant is a byte string with its own cofs/width header. Substrings are safe
 // aliases too: draw_img reads exactly that header and h*nb*3 following bytes.

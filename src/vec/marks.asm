@@ -8,11 +8,13 @@ plat_mark_a:
 	call	q_xy
 	ld	hl,MARK_A
 	ld	a,OP_MARK
+	ld	(t_ns),a
 	jp	q_push
 plat_mark_b:
 	call	q_xy
 	ld	hl,MARK_B
 	ld	a,OP_MARK
+	ld	(t_ns),a
 	jp	q_push
 ; mark_dead: A = X, L = Y, DE — запись цели: тип (+8) 15h/16h — след, 26h/27h — тайл C900h/C940h
 plat_mark_dead:
@@ -33,8 +35,10 @@ plat_mark_dead:
 	cp	0x16
 	ret	nz
 .m:	ld	a,OP_MARK
+	ld	(t_ns),a
 	jp	q_push
 .t:	ld	a,OP_TILE
+	ld	(t_ns),a
 	jp	q_push
 
 ; (flush) отметка: (qx), (qy), HL — пункты, FFh — конец. Строки вне поля — мимо

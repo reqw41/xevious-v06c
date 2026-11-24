@@ -19,7 +19,7 @@ function attachSpriteTrace(m, L) {
     current = [];
     for (let q = L.QUEUE; q < m.read16(L.qptr); q += 5) {
       const op = m.peek(q);
-      if (op !== 1 && op !== 3) continue;
+      if (op !== 1 && op !== 3 && op !== 5 && op !== 6) continue;   // 5, 6 — прицел, корабль своим выводом (src/vec/tship.asm)
       const x = m.peek(q + 1), y = m.peek(q + 2), img = m.read16(q + 3);
       const dy = m.peek(img), height = m.peek(img + 1), variant = m.read16(img + 2 + (x & 2));
       const col = (x >> 2) + m.peek(variant) - 1, nb = Math.min(m.peek(variant + 1), 32 - col);

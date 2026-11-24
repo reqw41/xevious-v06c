@@ -7,7 +7,7 @@
 ; Подписи — плоскость C (синий), значения — E (бледно-жёлтый).
 HUD_Y	equ	236		; верх строки на экране (полоса — 224..255)
 HUD_W	equ	30
-HUD_SP	equ	10		; пробел; 0–9 — цифры, буквы — ASCII (font_adr)
+HUD_SP	equ	10		; пробел; 0–9 — цифры, буквы — CH_x (font_adr)
 HUD_SHIP equ	11
 
 ; значения изменились — собрать знаки HUD_CH и записи HUD_REC
@@ -54,19 +54,19 @@ hud_check:
 	ld	hl,HUD_CH	; 1UP
 	ld	(hl),1
 	inc	hl
-	ld	(hl),'U'
+	ld	(hl),CH_U
 	inc	hl
-	ld	(hl),'P'
+	ld	(hl),CH_P
 	ld	a,12		; знак рекорда
 	ld	(HUD_CH+16),a
 	ld	hl,HUD_CH+24	; AREA
-	ld	(hl),'A'
+	ld	(hl),CH_A
 	inc	hl
-	ld	(hl),'R'
+	ld	(hl),CH_R
 	inc	hl
-	ld	(hl),'E'
+	ld	(hl),CH_E
 	inc	hl
-	ld	(hl),'A'
+	ld	(hl),CH_A
 	ld	a,(LIVES)	; запасные корабли: жизни − 1, не больше 5
 	dec	a
 	jp	z,.nl

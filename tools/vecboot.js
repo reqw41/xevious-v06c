@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Релизный образ со сжатой игрой и полноцветной заставкой (rom/Xevious-v06c.rom, загрузка с 0100h).
+ * Релизный образ со сжатой игрой и заставкой (rom/Xevious-v06c.rom, загрузка с 0100h).
  * Игра (build/xevious.rom, 0100h–BFFFh) при старте ещё сжата, поэтому весь экран 8000h–FFFFh (4 плоскости,
- * 16 цветов) свободен под заставку: build/gen/splash.bin (tools/vecsplash.py) или, без своей картинки,
- * build/gen/tload_idx.bin (загрузочный экран CPC, tools/vectitle.js).
+ * 16 цветов) свободен под заставку: по умолчанию build/gen/tload_idx.bin (загрузочный экран CPC, 4 цвета,
+ * tools/vectitle.js); build/gen/splash.bin (tools/vecsplash.py) — только после vecbuild.js --splash16.
  *
  * Память образа:  0100h  JP boot
  *                 0103h  поток игры (LZ, обратный: читается и пишется сверху вниз)
@@ -35,14 +35,26 @@ for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
   const c = sp[y * 256 + x], a = (x >> 3) * 256 + (255 - y), bit = 0x80 >> (x & 7);
   for (let p = 0; p < 4; p++) if (c & (8 >> p)) pic[p * 0x2000 + a] |= bit;
 }
-const PALP = sp.subarray(65536, 65552);
+// заставка в 4 цвета (загрузочный экран CPC) — только плоскости C000h/E000h; 8000h–BFFFh тогда свободны под
+// музыку (src/vec/bootmus.asm), а палитра повторяет 4 цвета на все 16 индексов, чтобы их не было видно
+const FOUR = sp.subarray(0, 65536).every((c) => c < 4);
+const PB = FOUR ? 0xc000 : 0x8000;                    // начало картинки в памяти
+const PIC = pic.subarray(PB - 0x8000);
+const PALP = FOUR ? Buffer.from(Array.from({ length: 16 }, (_, i) => sp[65536 + (i & 3)])) : sp.subarray(65536, 65552);
+let MUS = null;
+if (FOUR && fs.existsSync(path.join(GEN, 'bootmus_data.inc'))) {
+  const mb = build(path.join(ROOT, 'src/vec/bootmus.asm'), { base: 0x8000 });
+  MUS = mb.img;
+  fs.mkdirSync(path.join(ROOT, 'build/boot'), { recursive: true });   // метки — для tools/vec/bootmus_check.js
+  fs.writeFileSync(path.join(ROOT, 'build/boot/bootmus.json'), JSON.stringify(mb.labels, null, 1));
+}
 
 // прямой поток картинки в конце памяти: запись (8000h + o) только ниже непрочитанного (A + i)
 let k1 = 0, s1;
 for (;;) {
-  const n = 0x8000 - k1; s1 = pack(pic.subarray(0, n));
+  const n = PIC.length - k1; s1 = pack(PIC.subarray(0, n));
   const A = 0x10000 - s1.length; let d = 0;
-  walk(s1, n, (i, o) => { d = Math.max(d, 0x8000 + o - (A + i) + 1); });
+  walk(s1, n, (i, o) => { d = Math.max(d, PB + o - (A + i) + 1); });
   if (d <= 0) break;
   k1 += d;
 }
@@ -187,7 +199,7 @@ boot:\tdi
 \tld\ta,0xff
 \tout\t(3),a
 \tld\thl,${H(A1)}
-\tld\tde,0x8000
+\tld\tde,${H(PB)}
 \tcall\tunpf
 ${k1 ? `\tld\thl,pict\n\tld\tde,${H(0x10000 - k1)}\n\tld\tb,${k1}\n\tcall\tcpy\n` : ''}\tld\thl,palp
 \tld\ta,0x7e\t; LD A,(HL): цветная палитра
@@ -199,13 +211,13 @@ ${k1 ? `\tld\thl,pict\n\tld\tde,${H(0x10000 - k1)}\n\tld\tb,${k1}\n\tcall\tcpy\n
 \tout\t(5),a
 \tin\ta,(6)
 \tld\t(joy0),a
-.wk:\tcall\tframe
+${MUS ? '\tcall\t0x8000\t; музыка: mus_init\n' : ''}.wk:\tcall\t${MUS ? '0x8003' : 'frame'}
 \tcall\tanykey
 \tjp\tz,.wk
-.wr:\tcall\tframe
+.wr:\tcall\t${MUS ? '0x8003' : 'frame'}
 \tcall\tanykey
 \tjp\tnz,.wr
-\tld\ta,0xaf\t; XOR A: чёрная палитра
+${MUS ? '\tcall\t0x8006\t; mus_stop\n' : ''}\tld\ta,0xaf\t; XOR A: чёрная палитра
 \tld\t(palbyte),a
 \tcall\tsetpal
 \tld\thl,ubb
@@ -269,7 +281,7 @@ ${unpAsm('unpf', 0x10000 - k1, 1)}unpfx:\tret
 joy0:\tdb\t0
 palp:
 ${db(PALP)}pict:
-${db(pic.subarray(0x8000 - k1))}ubb:
+${db(PIC.subarray(PIC.length - k1))}ubb:
 ${db(ubImg)}boot_end:
 `;
 const BT = asm('boot.asm', bootSrc(k1), BOOT);
@@ -281,9 +293,13 @@ img[0] = 0xc3; img[1] = BOOT & 255; img[2] = BOOT >> 8;
 for (let j = 0; j < s2.length; j++) img[ZTOP - j - 0x100] = s2[j];
 bootImg.copy(img, BOOT - 0x100);
 s1.copy(img, A1 - 0x100);
+if (MUS) {
+  if (0x8000 + MUS.length > 0xb000) throw new Error('музыка заставки заходит в кольцо');
+  MUS.copy(img, 0x8000 - 0x100);
+}
 fs.mkdirSync(path.join(ROOT, 'rom'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'build/xevious_boot.rom'), img);
 fs.writeFileSync(path.join(ROOT, 'rom/Xevious-v06c.rom'), img);
 console.log(`загрузчик (${spf}): игра ${game.length} -> ${s2.length} Б (0103h–${H(ZTOP)}, отступ ${k2}), ` +
-  `загрузчик ${H(BOOT)}–${H(BOOT + bootImg.length - 1)}, картинка 32768 -> ${s1.length} Б (с ${H(A1)}, хвост ${k1}); ` +
-  `свободно ${A1 - BOOT - bootImg.length} Б`);
+  `загрузчик ${H(BOOT)}–${H(BOOT + bootImg.length - 1)}, картинка ${PIC.length} -> ${s1.length} Б (с ${H(A1)}, хвост ${k1}); ` +
+  `до 8000h свободно ${0x8000 - BOOT - bootImg.length} Б` + (MUS ? `; музыка заставки 8000h–${H(0x8000 + MUS.length - 1)}` : ''));
